@@ -48,3 +48,6 @@ xuserdata
 /x86
 /x32
 /x64
+
+/.idea/
+/cmake-build-debug/
