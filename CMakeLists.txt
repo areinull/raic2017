@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
-project(AI_strategy)
+project(MyStrategy)
 
-file(GLOB SOURCES "${CMAKE_SOURCE_DIR}/*.cpp"
-                  "${CMAKE_SOURCE_DIR}/model/*.cpp"
-                  "${CMAKE_SOURCE_DIR}/csimplesocket/*.cpp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -static \
+    -fno-optimize-sibling-calls -fno-strict-aliasing -D_LINUX \
+    -lm -s -O2 -Wall -Wtype-limits -Wno-unknown-pragmas")
 
-add_definitions(-std=c++14 -static -fno-optimize-sibling-calls -fno-strict-aliasing -D_LINUX -lm -s -x c++ -O2 -Wall -Wtype-limits -Wno-unknown-pragmas) 
+file(GLOB strategy_SRC "*.cpp" "model/*.cpp" "csimplesocket/*.cpp")
 
-add_executable(AI_strategy ${SOURCES})
+add_executable(MyStrategy ${strategy_SRC})
