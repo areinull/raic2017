@@ -30,7 +30,7 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game, Mo
         return;
     }
 
-    this->move(me, world);
+    this->move(me, world, game);
 
     executeDelayedMove(move);
 }
@@ -71,12 +71,12 @@ bool MyStrategy::executeDelayedMove(Move& move) {
     return true;
 }
 
-void MyStrategy::move(const Player &me, const World &world) {
+void MyStrategy::move(const Player& me, const World& world, const Game& game) {
     // Каждые 300 тиков ...
     if (world.getTickIndex() % 300 == 0) {
         // ... для каждого типа техники ...
         for (int vehicleType = 0; vehicleType < _VEHICLE_COUNT_; ++vehicleType) {
-            VehicleType targetType = getPreferredTargetType((VehicleType)vehicleType);
+            VehicleType targetType = getPreferredTargetType((VehicleType)vehicleType, me, world, game);
 
             // ... если этот тип может атаковать ...
             if (targetType == _VEHICLE_UNKNOWN_) {
@@ -213,16 +213,38 @@ void MyStrategy::move(const Player &me, const World &world) {
     }
 }
 
-VehicleType MyStrategy::getPreferredTargetType(VehicleType vehicleType) {
+VehicleType MyStrategy::getPreferredTargetType(VehicleType vehicleType, const model::Player &me, const model::World &, const model::Game &) const {
+    unsigned cnt[_VEHICLE_COUNT_] = {0};
+    for (auto it = vehicles_.cbegin(); it != vehicles_.cend(); ++it) {
+        if (it->second.getPlayerId() != me.getId()) {
+            ++cnt[it->second.getType()];
+        }
+    }
+
     switch (vehicleType) {
-        case VEHICLE_FIGHTER:
-            return VEHICLE_HELICOPTER;
+        case VEHICLE_FIGHTER: {
+            if (cnt[VEHICLE_FIGHTER]*1.2 > cnt[VEHICLE_HELICOPTER])
+                return VEHICLE_FIGHTER;
+            else
+                return VEHICLE_HELICOPTER;
+        }
         case VEHICLE_HELICOPTER:
-            return VEHICLE_TANK;
+            if (cnt[VEHICLE_TANK]) return VEHICLE_TANK;
+            if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
+            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
+            if (cnt[VEHICLE_HELICOPTER]) return VEHICLE_HELICOPTER;
         case VEHICLE_IFV:
-            return VEHICLE_HELICOPTER;
+            if (cnt[VEHICLE_HELICOPTER]) return VEHICLE_HELICOPTER;
+            if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
+            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
+            if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
+            return VEHICLE_TANK;
         case VEHICLE_TANK:
-            return VEHICLE_IFV;
+            if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
+            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
+            if (cnt[VEHICLE_TANK]) return VEHICLE_TANK;
+            if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
+            return VEHICLE_HELICOPTER;
         default:
             return _VEHICLE_UNKNOWN_;
     }
