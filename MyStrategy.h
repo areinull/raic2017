@@ -8,6 +8,10 @@
 #include "Strategy.h"
 
 class MyStrategy : public Strategy {
+    using VehicleById = std::unordered_map<int, model::Vehicle>;
+    using UpdateTickByVehicleId = std::unordered_map<long long, int>;
+    using MoveQueue = std::queue<model::Move>;
+
 public:
     void move(const model::Player& me, const model::World& world, const model::Game& game, model::Move& move) override;
 
@@ -18,9 +22,9 @@ private:
     bool executeDelayedMove(model::Move& move);
     void move(const model::Player& me, const model::World& world, const model::Game& game);
 
-    std::unordered_map<int, model::Vehicle> vehicles_;
-    std::unordered_map<long long, int> updateTickByVehicleId_;
-    std::queue<model::Move> moveQueue_;
+    VehicleById vehicles_;
+    UpdateTickByVehicleId updateTickByVehicleId_;
+    MoveQueue moveQueue_;
 };
 
 #endif
