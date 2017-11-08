@@ -286,12 +286,6 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             double dx = (targetX[targetType] - x[VEHICLE_TANK])/2.;
             double dy = (targetY[targetType] - y[VEHICLE_TANK])/2.;
             const double dd = dx*dx + dy*dy;
-            if (dd > 10000) {
-                const double k = dd/10000;
-                dx /= k;
-                dy /= k;
-            }
-
             Move m;
 
             m.setAction(ACTION_CLEAR_AND_SELECT);
@@ -302,9 +296,22 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             m.setVehicleType(VEHICLE_TANK);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_MOVE);
-            m.setX(dx);
-            m.setY(dy);
+
+            if (dd > 32*32) {
+                if (dd > 150 * 150) {
+                    const double k = dd/(150*150);
+                    dx /= k;
+                    dy /= k;
+                }
+                m.setAction(ACTION_MOVE);
+                m.setX(dx);
+                m.setY(dy);
+            } else {
+                m.setAction(ACTION_ROTATE);
+                m.setAngle((rand()%2? 1.: -1.)*PI);
+                m.setX(x[VEHICLE_TANK] + dx);
+                m.setY(y[VEHICLE_TANK] + dy);
+            }
             moveQueue_.push(m);
 
             if (!isnan(x[VEHICLE_FIGHTER]) && !isnan(y[VEHICLE_FIGHTER])) {
@@ -327,12 +334,6 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             double dx = (targetX[targetType] - x[VEHICLE_IFV])/2.;
             double dy = (targetY[targetType] - y[VEHICLE_IFV])/2.;
             const double dd = dx*dx + dy*dy;
-            if (dd > 10000) {
-                const double k = dd/10000;
-                dx /= k;
-                dy /= k;
-            }
-
             Move m;
 
             m.setAction(ACTION_CLEAR_AND_SELECT);
@@ -343,9 +344,21 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             m.setVehicleType(VEHICLE_IFV);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_MOVE);
-            m.setX(dx);
-            m.setY(dy);
+            if (dd > 32*32) {
+                if (dd > 150 * 150) {
+                    const double k = dd/(150 * 150);
+                    dx /= k;
+                    dy /= k;
+                }
+                m.setAction(ACTION_MOVE);
+                m.setX(dx);
+                m.setY(dy);
+            } else {
+                m.setAction(ACTION_ROTATE);
+                m.setAngle((rand()%2? 1.: -1.)*PI);
+                m.setX(x[VEHICLE_IFV] + dx);
+                m.setY(y[VEHICLE_IFV] + dy);
+            }
             moveQueue_.push(m);
 
             if (!isnan(x[VEHICLE_HELICOPTER]) && !isnan(y[VEHICLE_HELICOPTER])) {
@@ -420,26 +433,32 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                 m.setGroup(ARRV1_GROUP);
                 moveQueue_.push(m);
 
-//                m.setAction(ACTION_MOVE);
-//                m.setX((x[VEHICLE_TANK] - arrvx[0]) * 1.2);
-//                m.setY((y[VEHICLE_TANK] - arrvy[0]) * 1.2);
-                m.setAction(ACTION_ROTATE);
-                m.setX((x[VEHICLE_TANK] + arrvx[0])/2.);
-                m.setY((y[VEHICLE_TANK] + arrvy[0])/2.);
-                m.setAngle((rand() % 2? 1.: -1.) * PI);
+                if ((x[VEHICLE_TANK] - arrvx[0])*(x[VEHICLE_TANK] - arrvx[0]) + (y[VEHICLE_TANK] - arrvy[0])*(y[VEHICLE_TANK] - arrvy[0]) > 2000.) {
+                    m.setAction(ACTION_MOVE);
+                    m.setX((x[VEHICLE_TANK] - arrvx[0]) * 1.2);
+                    m.setY((y[VEHICLE_TANK] - arrvy[0]) * 1.2);
+                } else {
+                    m.setAction(ACTION_ROTATE);
+                    m.setX((x[VEHICLE_TANK] + arrvx[0]) / 2.);
+                    m.setY((y[VEHICLE_TANK] + arrvy[0]) / 2.);
+                    m.setAngle((rand() % 2 ? 1. : -1.) * PI);
+                }
                 moveQueue_.push(m);
             } else if (!isnan(x[VEHICLE_IFV]) && !isnan(y[VEHICLE_IFV])) {
                 m.setAction(ACTION_CLEAR_AND_SELECT);
                 m.setGroup(ARRV1_GROUP);
                 moveQueue_.push(m);
 
-//                m.setAction(ACTION_MOVE);
-//                m.setX((x[VEHICLE_IFV] - arrvx[0]) * 1.2);
-//                m.setY((y[VEHICLE_IFV] - arrvy[0]) * 1.2);
-                m.setAction(ACTION_ROTATE);
-                m.setX((x[VEHICLE_IFV] + arrvx[0])/2.);
-                m.setY((y[VEHICLE_IFV] + arrvy[0])/2.);
-                m.setAngle((rand() % 2? 1.: -1.) * PI);
+                if ((x[VEHICLE_IFV] - arrvx[0])*(x[VEHICLE_IFV] - arrvx[0]) + (y[VEHICLE_IFV] - arrvy[0])*(y[VEHICLE_IFV] - arrvy[0]) > 2000.) {
+                    m.setAction(ACTION_MOVE);
+                    m.setX((x[VEHICLE_IFV] - arrvx[0]) * 1.2);
+                    m.setY((y[VEHICLE_IFV] - arrvy[0]) * 1.2);
+                } else {
+                    m.setAction(ACTION_ROTATE);
+                    m.setX((x[VEHICLE_IFV] + arrvx[0]) / 2.);
+                    m.setY((y[VEHICLE_IFV] + arrvy[0]) / 2.);
+                    m.setAngle((rand() % 2 ? 1. : -1.) * PI);
+                }
                 moveQueue_.push(m);
             }
         }
@@ -452,26 +471,32 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                 m.setGroup(ARRV2_GROUP);
                 moveQueue_.push(m);
 
-//                m.setAction(ACTION_MOVE);
-//                m.setX((x[VEHICLE_IFV] - arrvx[1]) * 1.2);
-//                m.setY((y[VEHICLE_IFV] - arrvy[1]) * 1.2);
-                m.setAction(ACTION_ROTATE);
-                m.setX((x[VEHICLE_IFV] + arrvx[1])/2.);
-                m.setY((y[VEHICLE_IFV] + arrvy[1])/2.);
-                m.setAngle((rand() % 2? 1.: -1.) * PI);
+                if ((x[VEHICLE_IFV] - arrvx[1])*(x[VEHICLE_IFV] - arrvx[1]) + (y[VEHICLE_IFV] - arrvy[1])*(y[VEHICLE_IFV] - arrvy[1]) > 50.) {
+                    m.setAction(ACTION_MOVE);
+                    m.setX((x[VEHICLE_IFV] - arrvx[1]) * 1.2);
+                    m.setY((y[VEHICLE_IFV] - arrvy[1]) * 1.2);
+                } else {
+                    m.setAction(ACTION_ROTATE);
+                    m.setX((x[VEHICLE_IFV] + arrvx[1]) / 2.);
+                    m.setY((y[VEHICLE_IFV] + arrvy[1]) / 2.);
+                    m.setAngle((rand() % 2 ? 1. : -1.) * PI);
+                }
                 moveQueue_.push(m);
             } else if (!isnan(x[VEHICLE_TANK]) && !isnan(y[VEHICLE_TANK])) {
                 m.setAction(ACTION_CLEAR_AND_SELECT);
                 m.setGroup(ARRV2_GROUP);
                 moveQueue_.push(m);
 
-//                m.setAction(ACTION_MOVE);
-//                m.setX((x[VEHICLE_TANK] - arrvx[1]) * 1.2);
-//                m.setY((y[VEHICLE_TANK] - arrvy[1]) * 1.2);
-                m.setAction(ACTION_ROTATE);
-                m.setX((x[VEHICLE_TANK] + arrvx[1])/2.);
-                m.setY((y[VEHICLE_TANK] + arrvy[1])/2.);
-                m.setAngle((rand() % 2? 1.: -1.) * PI);
+                if ((x[VEHICLE_TANK] - arrvx[1])*(x[VEHICLE_TANK] - arrvx[1]) + (y[VEHICLE_TANK] - arrvy[1])*(y[VEHICLE_TANK] - arrvy[1]) > 50.) {
+                    m.setAction(ACTION_MOVE);
+                    m.setX((x[VEHICLE_TANK] - arrvx[1]) * 1.2);
+                    m.setY((y[VEHICLE_TANK] - arrvy[1]) * 1.2);
+                } else {
+                    m.setAction(ACTION_ROTATE);
+                    m.setX((x[VEHICLE_TANK] + arrvx[1]) / 2.);
+                    m.setY((y[VEHICLE_TANK] + arrvy[1]) / 2.);
+                    m.setAngle((rand() % 2 ? 1. : -1.) * PI);
+                }
                 moveQueue_.push(m);
             }
         }
