@@ -3,16 +3,17 @@
 #ifndef _MY_STRATEGY_H_
 #define _MY_STRATEGY_H_
 
-#include <unordered_map>
 #include <queue>
 #include "Strategy.h"
+#include "Context.h"
+#include "Blob.h"
 
 class MyStrategy : public Strategy {
-    using VehicleById = std::unordered_map<int, model::Vehicle>;
     using UpdateTickByVehicleId = std::unordered_map<long long, int>;
     using MoveQueue = std::queue<model::Move>;
 
 public:
+    MyStrategy();
     void move(const model::Player& me, const model::World& world, const model::Game& game, model::Move& move) override;
 
 private:
@@ -25,6 +26,8 @@ private:
     VehicleById vehicles_;
     UpdateTickByVehicleId updateTickByVehicleId_;
     MoveQueue moveQueue_;
+    Context ctx_;
+    Blob blobs_[model::_VEHICLE_COUNT_];
 };
 
 #endif

@@ -23,6 +23,15 @@ namespace {
     constexpr int IFV_GROUP = 4;
 }
 
+MyStrategy::MyStrategy() {
+    ctx_.vehicleById = &vehicles_;
+    blobs_[VEHICLE_FIGHTER] = Blob(VEHICLE_FIGHTER);
+    blobs_[VEHICLE_HELICOPTER] = Blob(VEHICLE_HELICOPTER);
+    blobs_[VEHICLE_TANK] = Blob(VEHICLE_TANK);
+    blobs_[VEHICLE_IFV] = Blob(VEHICLE_IFV);
+    blobs_[VEHICLE_ARRV] = Blob(VEHICLE_ARRV);
+}
+
 void MyStrategy::move(const Player& me, const World& world, const Game& game, Move& move) {
     initializeStrategy(game);
     initializeTick(me, world, game, move);
@@ -47,7 +56,11 @@ void MyStrategy::initializeStrategy(const model::Game &game) {
     }
 }
 
-void MyStrategy::initializeTick(const Player &, const World &world, const Game &, const Move &) {
+void MyStrategy::initializeTick(const Player &me, const World &world, const Game &game, const Move &) {
+    ctx_.me = &me;
+    ctx_.world = &world;
+    ctx_.game = &game;
+
     for (const auto &vehicle : world.getNewVehicles()) {
         vehicles_[vehicle.getId()] = vehicle;
         updateTickByVehicleId_[vehicle.getId()] = world.getTickIndex();
@@ -64,6 +77,10 @@ void MyStrategy::initializeTick(const Player &, const World &world, const Game &
             updateTickByVehicleId_[vehicleId] = world.getTickIndex();
         }
     }
+
+    for (auto &b: blobs_) {
+        b.update(ctx_);
+    }
 }
 
 bool MyStrategy::executeDelayedMove(Move& move) {
@@ -77,23 +94,9 @@ bool MyStrategy::executeDelayedMove(Move& move) {
 }
 
 void MyStrategy::move(const Player& me, const World& world, const Game& game) {
+/*
     // Начальная расстановка
     if (world.getTickIndex() == 0) {
-/*        {
-            Move m;
-            m.setAction(ACTION_CLEAR_AND_SELECT);
-            m.setLeft(0);
-            m.setTop(0);
-            m.setBottom(world.getHeight());
-            m.setRight(world.getWidth());
-            m.setVehicleType(VEHICLE_ARRV);
-            moveQueue_.push(m);
-
-            m.setAction(ACTION_MOVE);
-            m.setX(world.getWidth()/2);
-            m.setY(world.getHeight()/2);
-            moveQueue_.push(m);
-        }*/
 
         // поделить БРЭМ на 2 группы
         double arrv_x_min = world.getWidth();
@@ -538,6 +541,64 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             moveQueue_.push(tmp);
         }
     }
+*/
+    if (moveQueue_.empty()) {
+        double targetX[_VEHICLE_COUNT_] = {0.}, targetY[_VEHICLE_COUNT_] = {0.};
+        int targetCnt[_VEHICLE_COUNT_] = {0};
+        for (const auto &v: vehicles_) {
+            if (v.second.getPlayerId() != me.getId()) {
+                targetX[v.second.getType()] += v.second.getX();
+                targetY[v.second.getType()] += v.second.getY();
+                ++targetCnt[v.second.getType()];
+            }
+        }
+        for (int i = 0; i < _VEHICLE_COUNT_; ++i) {
+            if (targetCnt[i]) {
+                targetX[i] /= targetCnt[i];
+                targetY[i] /= targetCnt[i];
+            }
+        }
+
+        for (const auto vt: {VEHICLE_TANK, VEHICLE_IFV, VEHICLE_FIGHTER, VEHICLE_HELICOPTER}) {
+            if (!blobs_[vt].isAlive())
+                continue;
+
+            const auto tt = getPreferredTargetType(vt, me, world, game);
+            moveQueue_.push(blobs_[vt].select(ctx_));
+            if (tt != _VEHICLE_UNKNOWN_ && targetCnt[tt]) {
+                moveQueue_.push(blobs_[vt].move(ctx_, (targetX[tt] + blobs_[vt].getX())/2., (targetY[tt] + blobs_[vt].getY())/2.));
+            } else {
+                moveQueue_.push(blobs_[vt].rndWalk(ctx_));
+            }
+        }
+
+        if (blobs_[VEHICLE_ARRV].isAlive()) {
+            auto tankHpDeficit = blobs_[VEHICLE_TANK].getHpDeficit(ctx_);
+            auto ifvHpDeficit = blobs_[VEHICLE_IFV].getHpDeficit(ctx_);
+            moveQueue_.push(blobs_[VEHICLE_ARRV].select(ctx_));
+            if (tankHpDeficit > ifvHpDeficit) {
+                moveQueue_.push(blobs_[VEHICLE_ARRV].move(ctx_, blobs_[VEHICLE_TANK].getX(), blobs_[VEHICLE_TANK].getY()));
+            } else if (ifvHpDeficit) {
+                moveQueue_.push(blobs_[VEHICLE_ARRV].move(ctx_, blobs_[VEHICLE_IFV].getX(), blobs_[VEHICLE_IFV].getY()));
+            } else {
+                double x = 0.;
+                double y = 0.;
+                double cnt = 0;
+                for (const auto &v: vehicles_) {
+                    if (v.second.getPlayerId() == me.getId()) {
+                        x += v.second.getX();
+                        x += v.second.getY();
+                        ++cnt;
+                    }
+                }
+                if (cnt) {
+                    x /= cnt;
+                    y /= cnt;
+                }
+                moveQueue_.push(blobs_[VEHICLE_ARRV].move(ctx_, x, y));
+            }
+        }
+    }
 }
 
 VehicleType MyStrategy::getPreferredTargetType(VehicleType vehicleType, const model::Player &me, const model::World &, const model::Game &) const {
@@ -563,14 +624,14 @@ VehicleType MyStrategy::getPreferredTargetType(VehicleType vehicleType, const mo
             return VEHICLE_FIGHTER;
         case VEHICLE_IFV:
             if (cnt[VEHICLE_HELICOPTER]) return VEHICLE_HELICOPTER;
+            if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
             if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
             if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
-            if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
             return VEHICLE_TANK;
         case VEHICLE_TANK:
             if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
-            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
             if (cnt[VEHICLE_TANK]) return VEHICLE_TANK;
+            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
             if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
             return VEHICLE_HELICOPTER;
         default:
