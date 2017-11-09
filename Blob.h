@@ -9,7 +9,7 @@
 
 class Blob {
 public:
-    explicit Blob(model::VehicleType type = model::_VEHICLE_UNKNOWN_);
+    explicit Blob(model::VehicleType type = model::VehicleType ::_UNKNOWN_);
 
     model::Move select(Context &ctx) const;
     model::Move move(Context &ctx, double x, double y) const;

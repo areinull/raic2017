@@ -27,7 +27,7 @@ private:
     UpdateTickByVehicleId updateTickByVehicleId_;
     MoveQueue moveQueue_;
     Context ctx_;
-    Blob blobs_[model::_VEHICLE_COUNT_];
+    Blob blobs_[(int)model::VehicleType::_COUNT_];
 };
 
 #endif

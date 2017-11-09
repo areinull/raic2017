@@ -12,7 +12,7 @@ Blob::Blob(VehicleType type)
 
 Move Blob::select(Context &ctx) const {
     Move m;
-    m.setAction(ACTION_CLEAR_AND_SELECT);
+    m.setAction(ActionType::CLEAR_AND_SELECT);
     m.setLeft(0);
     m.setTop(0);
     m.setRight(ctx.world->getWidth());
@@ -26,11 +26,11 @@ Move Blob::move(Context &, double x, double y) const {
     constexpr double dd_thr = 50. * 50.;
     const double dd = (x-x_)*(x-x_)+(y-y_)*(y-y_);
     if (dd > dd_thr) {
-        m.setAction(ACTION_MOVE);
+        m.setAction(ActionType::MOVE);
         m.setX(x - x_);
         m.setY(y - y_);
     } else {
-        m.setAction(ACTION_ROTATE);
+        m.setAction(ActionType::ROTATE);
         m.setX((x + x_)/2.);
         m.setY((y + y_)/2.);
         m.setAngle((double)(rand()%5-2) * PI / 3.);
@@ -40,7 +40,7 @@ Move Blob::move(Context &, double x, double y) const {
 
 Move Blob::rndWalk(Context &ctx) const {
     Move m;
-    m.setAction(ACTION_MOVE);
+    m.setAction(ActionType::MOVE);
     m.setX(rand() % (int)ctx.world->getWidth() - x_);
     m.setY(rand() % (int)ctx.world->getHeight() - y_);
     return m;

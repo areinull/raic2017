@@ -25,11 +25,11 @@ namespace {
 
 MyStrategy::MyStrategy() {
     ctx_.vehicleById = &vehicles_;
-    blobs_[VEHICLE_FIGHTER] = Blob(VEHICLE_FIGHTER);
-    blobs_[VEHICLE_HELICOPTER] = Blob(VEHICLE_HELICOPTER);
-    blobs_[VEHICLE_TANK] = Blob(VEHICLE_TANK);
-    blobs_[VEHICLE_IFV] = Blob(VEHICLE_IFV);
-    blobs_[VEHICLE_ARRV] = Blob(VEHICLE_ARRV);
+    blobs_[(int)VehicleType::FIGHTER] = Blob(VehicleType::FIGHTER);
+    blobs_[(int)VehicleType::HELICOPTER] = Blob(VehicleType::HELICOPTER);
+    blobs_[(int)VehicleType::TANK] = Blob(VehicleType::TANK);
+    blobs_[(int)VehicleType::IFV] = Blob(VehicleType::IFV);
+    blobs_[(int)VehicleType::ARRV] = Blob(VehicleType::ARRV);
 }
 
 void MyStrategy::move(const Player& me, const World& world, const Game& game, Move& move) {
@@ -102,7 +102,7 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         double arrv_x_min = world.getWidth();
         double arrv_x_max = 0.;
         std::for_each(vehicles_.cbegin(), vehicles_.cend(), [&](VehicleById::const_reference v) {
-            if (v.second.getPlayerId() == me.getId() && v.second.getType() == VEHICLE_ARRV)
+            if (v.second.getPlayerId() == me.getId() && v.second.getType() == VehicleType::ARRV)
             {
                 arrv_x_min = std::min(arrv_x_min, v.second.getX());
                 arrv_x_max = std::max(arrv_x_max, v.second.getX());
@@ -110,25 +110,25 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         });
         {
             Move m;
-            m.setAction(ACTION_CLEAR_AND_SELECT);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setLeft(0.);
             m.setTop(0.);
             m.setBottom(world.getHeight());
             m.setRight((arrv_x_min + arrv_x_max)/2.);
-            m.setVehicleType(VEHICLE_ARRV);
+            m.setVehicleType(VehicleType::ARRV);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_ASSIGN);
+            m.setAction(ActionType::ASSIGN);
             m.setGroup(ARRV1_GROUP);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_CLEAR_AND_SELECT);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setLeft(m.getRight());
             m.setRight(world.getWidth());
             m.setGroup(0);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_ASSIGN);
+            m.setAction(ActionType::ASSIGN);
             m.setGroup(ARRV2_GROUP);
             moveQueue_.push(m);
         }
@@ -146,19 +146,19 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             std::for_each(vehicles_.begin(), vehicles_.end(), [&](VehicleById::const_reference v) {
                 if (v.second.getPlayerId() == me.getId()) {
                     switch (v.second.getType()) {
-                        case VEHICLE_TANK:
+                        case VehicleType::TANK:
                             tank_x_cur = std::min(tank_x_cur, v.second.getX());
                             tank_y_cur = std::min(tank_y_cur, v.second.getY());
                             break;
-                        case VEHICLE_FIGHTER:
+                        case VehicleType::FIGHTER:
                             plane_x_cur = std::min(plane_x_cur, v.second.getX());
                             plane_y_cur = std::min(plane_y_cur, v.second.getY());
                             break;
-                        case VEHICLE_IFV:
+                        case VehicleType::IFV:
                             ifv_x_cur = std::min(ifv_x_cur, v.second.getX());
                             ifv_y_cur = std::min(ifv_y_cur, v.second.getY());
                             break;
-                        case VEHICLE_HELICOPTER:
+                        case VehicleType::HELICOPTER:
                             heli_x_cur = std::min(heli_x_cur, v.second.getX());
                             heli_y_cur = std::min(heli_y_cur, v.second.getY());
                             break;
@@ -188,61 +188,61 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
 
             // собрать вместе танки и самолёты
             Move m;
-            m.setAction(ACTION_CLEAR_AND_SELECT);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setLeft(0.);
             m.setTop(0.);
             m.setBottom(world.getHeight());
             m.setRight(world.getWidth());
-            m.setVehicleType(VEHICLE_TANK);
+            m.setVehicleType(VehicleType::TANK);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_MOVE);
+            m.setAction(ActionType::MOVE);
             m.setX(tank_x_start - tank_x_cur);
             m.setY(tank_y_start - tank_y_cur);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_CLEAR_AND_SELECT);
-            m.setVehicleType(VEHICLE_FIGHTER);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setVehicleType(VehicleType::FIGHTER);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_MOVE);
+            m.setAction(ActionType::MOVE);
             m.setX(tank_x_start - plane_x_cur);
             m.setY(tank_y_start - plane_y_cur);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_ADD_TO_SELECTION);
-            m.setVehicleType(VEHICLE_TANK);
+            m.setAction(ActionType::ADD_TO_SELECTION);
+            m.setVehicleType(VehicleType::TANK);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_ASSIGN);
+            m.setAction(ActionType::ASSIGN);
             m.setGroup(TANK_GROUP);
             moveQueue_.push(m);
             m.setGroup(0);
 
             // собрать вместе БТР и вертолёты
-            m.setAction(ACTION_CLEAR_AND_SELECT);
-            m.setVehicleType(VEHICLE_IFV);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setVehicleType(VehicleType::IFV);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_MOVE);
+            m.setAction(ActionType::MOVE);
             m.setX(ifv_x_start - ifv_x_cur);
             m.setY(ifv_y_start - ifv_y_cur);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_CLEAR_AND_SELECT);
-            m.setVehicleType(VEHICLE_HELICOPTER);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setVehicleType(VehicleType::HELICOPTER);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_MOVE);
+            m.setAction(ActionType::MOVE);
             m.setX(ifv_x_start - heli_x_cur);
             m.setY(ifv_y_start - heli_y_cur);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_ADD_TO_SELECTION);
-            m.setVehicleType(VEHICLE_IFV);
+            m.setAction(ActionType::ADD_TO_SELECTION);
+            m.setVehicleType(VehicleType::IFV);
             moveQueue_.push(m);
 
-            m.setAction(ACTION_ASSIGN);
+            m.setAction(ActionType::ASSIGN);
             m.setGroup(IFV_GROUP);
             moveQueue_.push(m);
         }
@@ -251,10 +251,10 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
     }
 
     if (world.getTickIndex() % 300 == 0) {
-        double x[_VEHICLE_COUNT_] = {0.}, y[_VEHICLE_COUNT_] = {0.};
-        int cnt[_VEHICLE_COUNT_] = {0};
-        double targetX[_VEHICLE_COUNT_] = {0.}, targetY[_VEHICLE_COUNT_] = {0.};
-        int targetCnt[_VEHICLE_COUNT_] = {0};
+        double x[_VehicleType::COUNT_] = {0.}, y[_VehicleType::COUNT_] = {0.};
+        int cnt[_VehicleType::COUNT_] = {0};
+        double targetX[_VehicleType::COUNT_] = {0.}, targetY[_VehicleType::COUNT_] = {0.};
+        int targetCnt[_VehicleType::COUNT_] = {0};
         bool planeBusy = false, heliBusy = false;
         for (const auto &v: vehicles_) {
             if (v.second.getPlayerId() == me.getId()) {
@@ -267,7 +267,7 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                 ++targetCnt[v.second.getType()];
             }
         }
-        for (int i = 0; i < _VEHICLE_COUNT_; ++i) {
+        for (int i = 0; i < _VehicleType::COUNT_; ++i) {
             if (cnt[i]) {
                 x[i] /= cnt[i];
                 y[i] /= cnt[i];
@@ -284,19 +284,19 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             }
         }
 
-        if (!isnan(x[VEHICLE_TANK]) && !isnan(y[VEHICLE_TANK])) {
-            VehicleType targetType = getPreferredTargetType(VEHICLE_TANK, me, world, game);
-            double dx = (targetX[targetType] - x[VEHICLE_TANK])/2.;
-            double dy = (targetY[targetType] - y[VEHICLE_TANK])/2.;
+        if (!isnan(x[VehicleType::TANK]) && !isnan(y[VehicleType::TANK])) {
+            VehicleType targetType = getPreferredTargetType(VehicleType::TANK, me, world, game);
+            double dx = (targetX[targetType] - x[VehicleType::TANK])/2.;
+            double dy = (targetY[targetType] - y[VehicleType::TANK])/2.;
             const double dd = dx*dx + dy*dy;
             Move m;
 
-            m.setAction(ACTION_CLEAR_AND_SELECT);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setLeft(0);
             m.setTop(0);
             m.setRight(world.getWidth());
             m.setBottom(world.getHeight());
-            m.setVehicleType(VEHICLE_TANK);
+            m.setVehicleType(VehicleType::TANK);
             moveQueue_.push(m);
 
 
@@ -306,25 +306,25 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                     dx /= k;
                     dy /= k;
                 }
-                m.setAction(ACTION_MOVE);
+                m.setAction(ActionType::MOVE);
                 m.setX(dx);
                 m.setY(dy);
             } else {
-                m.setAction(ACTION_ROTATE);
+                m.setAction(ActionType::ROTATE);
                 m.setAngle((rand()%2? 1.: -1.)*PI);
-                m.setX(x[VEHICLE_TANK] + dx);
-                m.setY(y[VEHICLE_TANK] + dy);
+                m.setX(x[VehicleType::TANK] + dx);
+                m.setY(y[VehicleType::TANK] + dy);
             }
             moveQueue_.push(m);
 
-            if (!isnan(x[VEHICLE_FIGHTER]) && !isnan(y[VEHICLE_FIGHTER])) {
-                m.setAction(ACTION_CLEAR_AND_SELECT);
-                m.setVehicleType(VEHICLE_FIGHTER);
+            if (!isnan(x[VehicleType::FIGHTER]) && !isnan(y[VehicleType::FIGHTER])) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setVehicleType(VehicleType::FIGHTER);
                 moveQueue_.push(m);
 
-                m.setAction(ACTION_MOVE);
-                m.setX(x[VEHICLE_TANK] - x[VEHICLE_FIGHTER] + dx);
-                m.setY(y[VEHICLE_TANK] - y[VEHICLE_FIGHTER] + dy);
+                m.setAction(ActionType::MOVE);
+                m.setX(x[VehicleType::TANK] - x[VehicleType::FIGHTER] + dx);
+                m.setY(y[VehicleType::TANK] - y[VehicleType::FIGHTER] + dy);
                 m.setMaxSpeed(game.getTankSpeed());
                 moveQueue_.push(m);
 
@@ -332,19 +332,19 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             }
         }
 
-        if (!isnan(x[VEHICLE_IFV]) && !isnan(y[VEHICLE_IFV])) {
-            VehicleType targetType = getPreferredTargetType(VEHICLE_IFV, me, world, game);
-            double dx = (targetX[targetType] - x[VEHICLE_IFV])/2.;
-            double dy = (targetY[targetType] - y[VEHICLE_IFV])/2.;
+        if (!isnan(x[VehicleType::IFV]) && !isnan(y[VehicleType::IFV])) {
+            VehicleType targetType = getPreferredTargetType(VehicleType::IFV, me, world, game);
+            double dx = (targetX[targetType] - x[VehicleType::IFV])/2.;
+            double dy = (targetY[targetType] - y[VehicleType::IFV])/2.;
             const double dd = dx*dx + dy*dy;
             Move m;
 
-            m.setAction(ACTION_CLEAR_AND_SELECT);
+            m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setLeft(0);
             m.setTop(0);
             m.setRight(world.getWidth());
             m.setBottom(world.getHeight());
-            m.setVehicleType(VEHICLE_IFV);
+            m.setVehicleType(VehicleType::IFV);
             moveQueue_.push(m);
 
             if (dd > 32*32) {
@@ -353,25 +353,25 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                     dx /= k;
                     dy /= k;
                 }
-                m.setAction(ACTION_MOVE);
+                m.setAction(ActionType::MOVE);
                 m.setX(dx);
                 m.setY(dy);
             } else {
-                m.setAction(ACTION_ROTATE);
+                m.setAction(ActionType::ROTATE);
                 m.setAngle((rand()%2? 1.: -1.)*PI);
-                m.setX(x[VEHICLE_IFV] + dx);
-                m.setY(y[VEHICLE_IFV] + dy);
+                m.setX(x[VehicleType::IFV] + dx);
+                m.setY(y[VehicleType::IFV] + dy);
             }
             moveQueue_.push(m);
 
-            if (!isnan(x[VEHICLE_HELICOPTER]) && !isnan(y[VEHICLE_HELICOPTER])) {
-                m.setAction(ACTION_CLEAR_AND_SELECT);
-                m.setVehicleType(VEHICLE_HELICOPTER);
+            if (!isnan(x[VehicleType::HELICOPTER]) && !isnan(y[VehicleType::HELICOPTER])) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setVehicleType(VehicleType::HELICOPTER);
                 moveQueue_.push(m);
 
-                m.setAction(ACTION_MOVE);
-                m.setX(x[VEHICLE_IFV] - x[VEHICLE_HELICOPTER] + dx);
-                m.setY(y[VEHICLE_IFV] - y[VEHICLE_HELICOPTER] + dy);
+                m.setAction(ActionType::MOVE);
+                m.setX(x[VehicleType::IFV] - x[VehicleType::HELICOPTER] + dx);
+                m.setY(y[VehicleType::IFV] - y[VehicleType::HELICOPTER] + dy);
                 m.setMaxSpeed(game.getIfvSpeed());
                 moveQueue_.push(m);
 
@@ -379,32 +379,32 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
             }
         }
 
-        if (!planeBusy && !isnan(x[VEHICLE_FIGHTER]) && !isnan(y[VEHICLE_FIGHTER])) {
-            const auto targetType = getPreferredTargetType(VEHICLE_FIGHTER, me, world, game);
-            if (targetType != _VEHICLE_UNKNOWN_) {
+        if (!planeBusy && !isnan(x[VehicleType::FIGHTER]) && !isnan(y[VehicleType::FIGHTER])) {
+            const auto targetType = getPreferredTargetType(VehicleType::FIGHTER, me, world, game);
+            if (targetType != _VehicleType::UNKNOWN_) {
                 Move m;
-                m.setAction(ACTION_CLEAR_AND_SELECT);
-                m.setVehicleType(VEHICLE_FIGHTER);
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setVehicleType(VehicleType::FIGHTER);
                 moveQueue_.push(m);
 
-                m.setAction(ACTION_MOVE);
-                m.setX(targetX[targetType] - x[VEHICLE_FIGHTER]);
-                m.setY(targetY[targetType] - y[VEHICLE_FIGHTER]);
+                m.setAction(ActionType::MOVE);
+                m.setX(targetX[targetType] - x[VehicleType::FIGHTER]);
+                m.setY(targetY[targetType] - y[VehicleType::FIGHTER]);
                 moveQueue_.push(m);
             }
         }
 
-        if (!heliBusy && !isnan(x[VEHICLE_HELICOPTER]) && !isnan(y[VEHICLE_HELICOPTER])) {
-            const auto targetType = getPreferredTargetType(VEHICLE_HELICOPTER, me, world, game);
-            if (targetType != _VEHICLE_UNKNOWN_) {
+        if (!heliBusy && !isnan(x[VehicleType::HELICOPTER]) && !isnan(y[VehicleType::HELICOPTER])) {
+            const auto targetType = getPreferredTargetType(VehicleType::HELICOPTER, me, world, game);
+            if (targetType != _VehicleType::UNKNOWN_) {
                 Move m;
-                m.setAction(ACTION_CLEAR_AND_SELECT);
-                m.setVehicleType(VEHICLE_HELICOPTER);
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setVehicleType(VehicleType::HELICOPTER);
                 moveQueue_.push(m);
 
-                m.setAction(ACTION_MOVE);
-                m.setX(targetX[targetType] - x[VEHICLE_HELICOPTER]);
-                m.setY(targetY[targetType] - y[VEHICLE_HELICOPTER]);
+                m.setAction(ActionType::MOVE);
+                m.setX(targetX[targetType] - x[VehicleType::HELICOPTER]);
+                m.setY(targetY[targetType] - y[VehicleType::HELICOPTER]);
                 moveQueue_.push(m);
             }
         }
@@ -412,7 +412,7 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         double arrvx[2] = {0.}, arrvy[2] = {0.};
         int arrvcnt[2] = {0};
         for (const auto &v: vehicles_) {
-            if (v.second.getPlayerId() == me.getId() && v.second.getType() == VEHICLE_ARRV) {
+            if (v.second.getPlayerId() == me.getId() && v.second.getType() == VehicleType::ARRV) {
                 arrvx[v.second.getGroups()[0] - 1] += v.second.getX();
                 arrvy[v.second.getGroups()[0] - 1] += v.second.getY();
                 ++arrvcnt[v.second.getGroups()[0] - 1];
@@ -431,35 +431,35 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         if (!isnan(arrvx[0]) && !isnan(arrvy[0])) {
             Move m;
 
-            if (!isnan(x[VEHICLE_TANK]) && !isnan(y[VEHICLE_TANK])) {
-                m.setAction(ACTION_CLEAR_AND_SELECT);
+            if (!isnan(x[VehicleType::TANK]) && !isnan(y[VehicleType::TANK])) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
                 m.setGroup(ARRV1_GROUP);
                 moveQueue_.push(m);
 
-                if ((x[VEHICLE_TANK] - arrvx[0])*(x[VEHICLE_TANK] - arrvx[0]) + (y[VEHICLE_TANK] - arrvy[0])*(y[VEHICLE_TANK] - arrvy[0]) > 2000.) {
-                    m.setAction(ACTION_MOVE);
-                    m.setX((x[VEHICLE_TANK] - arrvx[0]) * 1.2);
-                    m.setY((y[VEHICLE_TANK] - arrvy[0]) * 1.2);
+                if ((x[VehicleType::TANK] - arrvx[0])*(x[VehicleType::TANK] - arrvx[0]) + (y[VehicleType::TANK] - arrvy[0])*(y[VehicleType::TANK] - arrvy[0]) > 2000.) {
+                    m.setAction(ActionType::MOVE);
+                    m.setX((x[VehicleType::TANK] - arrvx[0]) * 1.2);
+                    m.setY((y[VehicleType::TANK] - arrvy[0]) * 1.2);
                 } else {
-                    m.setAction(ACTION_ROTATE);
-                    m.setX((x[VEHICLE_TANK] + arrvx[0]) / 2.);
-                    m.setY((y[VEHICLE_TANK] + arrvy[0]) / 2.);
+                    m.setAction(ActionType::ROTATE);
+                    m.setX((x[VehicleType::TANK] + arrvx[0]) / 2.);
+                    m.setY((y[VehicleType::TANK] + arrvy[0]) / 2.);
                     m.setAngle((rand() % 2 ? 1. : -1.) * PI);
                 }
                 moveQueue_.push(m);
-            } else if (!isnan(x[VEHICLE_IFV]) && !isnan(y[VEHICLE_IFV])) {
-                m.setAction(ACTION_CLEAR_AND_SELECT);
+            } else if (!isnan(x[VehicleType::IFV]) && !isnan(y[VehicleType::IFV])) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
                 m.setGroup(ARRV1_GROUP);
                 moveQueue_.push(m);
 
-                if ((x[VEHICLE_IFV] - arrvx[0])*(x[VEHICLE_IFV] - arrvx[0]) + (y[VEHICLE_IFV] - arrvy[0])*(y[VEHICLE_IFV] - arrvy[0]) > 2000.) {
-                    m.setAction(ACTION_MOVE);
-                    m.setX((x[VEHICLE_IFV] - arrvx[0]) * 1.2);
-                    m.setY((y[VEHICLE_IFV] - arrvy[0]) * 1.2);
+                if ((x[VehicleType::IFV] - arrvx[0])*(x[VehicleType::IFV] - arrvx[0]) + (y[VehicleType::IFV] - arrvy[0])*(y[VehicleType::IFV] - arrvy[0]) > 2000.) {
+                    m.setAction(ActionType::MOVE);
+                    m.setX((x[VehicleType::IFV] - arrvx[0]) * 1.2);
+                    m.setY((y[VehicleType::IFV] - arrvy[0]) * 1.2);
                 } else {
-                    m.setAction(ACTION_ROTATE);
-                    m.setX((x[VEHICLE_IFV] + arrvx[0]) / 2.);
-                    m.setY((y[VEHICLE_IFV] + arrvy[0]) / 2.);
+                    m.setAction(ActionType::ROTATE);
+                    m.setX((x[VehicleType::IFV] + arrvx[0]) / 2.);
+                    m.setY((y[VehicleType::IFV] + arrvy[0]) / 2.);
                     m.setAngle((rand() % 2 ? 1. : -1.) * PI);
                 }
                 moveQueue_.push(m);
@@ -469,35 +469,35 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         if (!isnan(arrvx[1]) && !isnan(arrvy[1])) {
             Move m;
 
-            if (!isnan(x[VEHICLE_IFV]) && !isnan(y[VEHICLE_IFV])) {
-                m.setAction(ACTION_CLEAR_AND_SELECT);
+            if (!isnan(x[VehicleType::IFV]) && !isnan(y[VehicleType::IFV])) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
                 m.setGroup(ARRV2_GROUP);
                 moveQueue_.push(m);
 
-                if ((x[VEHICLE_IFV] - arrvx[1])*(x[VEHICLE_IFV] - arrvx[1]) + (y[VEHICLE_IFV] - arrvy[1])*(y[VEHICLE_IFV] - arrvy[1]) > 50.) {
-                    m.setAction(ACTION_MOVE);
-                    m.setX((x[VEHICLE_IFV] - arrvx[1]) * 1.2);
-                    m.setY((y[VEHICLE_IFV] - arrvy[1]) * 1.2);
+                if ((x[VehicleType::IFV] - arrvx[1])*(x[VehicleType::IFV] - arrvx[1]) + (y[VehicleType::IFV] - arrvy[1])*(y[VehicleType::IFV] - arrvy[1]) > 50.) {
+                    m.setAction(ActionType::MOVE);
+                    m.setX((x[VehicleType::IFV] - arrvx[1]) * 1.2);
+                    m.setY((y[VehicleType::IFV] - arrvy[1]) * 1.2);
                 } else {
-                    m.setAction(ACTION_ROTATE);
-                    m.setX((x[VEHICLE_IFV] + arrvx[1]) / 2.);
-                    m.setY((y[VEHICLE_IFV] + arrvy[1]) / 2.);
+                    m.setAction(ActionType::ROTATE);
+                    m.setX((x[VehicleType::IFV] + arrvx[1]) / 2.);
+                    m.setY((y[VehicleType::IFV] + arrvy[1]) / 2.);
                     m.setAngle((rand() % 2 ? 1. : -1.) * PI);
                 }
                 moveQueue_.push(m);
-            } else if (!isnan(x[VEHICLE_TANK]) && !isnan(y[VEHICLE_TANK])) {
-                m.setAction(ACTION_CLEAR_AND_SELECT);
+            } else if (!isnan(x[VehicleType::TANK]) && !isnan(y[VehicleType::TANK])) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
                 m.setGroup(ARRV2_GROUP);
                 moveQueue_.push(m);
 
-                if ((x[VEHICLE_TANK] - arrvx[1])*(x[VEHICLE_TANK] - arrvx[1]) + (y[VEHICLE_TANK] - arrvy[1])*(y[VEHICLE_TANK] - arrvy[1]) > 50.) {
-                    m.setAction(ACTION_MOVE);
-                    m.setX((x[VEHICLE_TANK] - arrvx[1]) * 1.2);
-                    m.setY((y[VEHICLE_TANK] - arrvy[1]) * 1.2);
+                if ((x[VehicleType::TANK] - arrvx[1])*(x[VehicleType::TANK] - arrvx[1]) + (y[VehicleType::TANK] - arrvy[1])*(y[VehicleType::TANK] - arrvy[1]) > 50.) {
+                    m.setAction(ActionType::MOVE);
+                    m.setX((x[VehicleType::TANK] - arrvx[1]) * 1.2);
+                    m.setY((y[VehicleType::TANK] - arrvy[1]) * 1.2);
                 } else {
-                    m.setAction(ACTION_ROTATE);
-                    m.setX((x[VEHICLE_TANK] + arrvx[1]) / 2.);
-                    m.setY((y[VEHICLE_TANK] + arrvy[1]) / 2.);
+                    m.setAction(ActionType::ROTATE);
+                    m.setX((x[VehicleType::TANK] + arrvx[1]) / 2.);
+                    m.setY((y[VehicleType::TANK] + arrvy[1]) / 2.);
                     m.setAngle((rand() % 2 ? 1. : -1.) * PI);
                 }
                 moveQueue_.push(m);
@@ -534,7 +534,7 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         // ... и поворачиваем её на случайный угол.
         if (!isnan(x) && !isnan(y)) {
             Move tmp;
-            tmp.setAction(ACTION_ROTATE);
+            tmp.setAction(ActionType::ROTATE);
             tmp.setX(x);
             tmp.setY(y);
             tmp.setAngle((rand()%360-180)*PI/180.);
@@ -543,43 +543,43 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
     }
 */
     if (moveQueue_.empty()) {
-        double targetX[_VEHICLE_COUNT_] = {0.}, targetY[_VEHICLE_COUNT_] = {0.};
-        int targetCnt[_VEHICLE_COUNT_] = {0};
+        double targetX[(int)VehicleType::_COUNT_] = {0.}, targetY[(int)VehicleType::_COUNT_] = {0.};
+        int targetCnt[(int)VehicleType::_COUNT_] = {0};
         for (const auto &v: vehicles_) {
             if (v.second.getPlayerId() != me.getId()) {
-                targetX[v.second.getType()] += v.second.getX();
-                targetY[v.second.getType()] += v.second.getY();
-                ++targetCnt[v.second.getType()];
+                targetX[(int)v.second.getType()] += v.second.getX();
+                targetY[(int)v.second.getType()] += v.second.getY();
+                ++targetCnt[(int)v.second.getType()];
             }
         }
-        for (int i = 0; i < _VEHICLE_COUNT_; ++i) {
+        for (int i = 0; i < (int)VehicleType::_COUNT_; ++i) {
             if (targetCnt[i]) {
                 targetX[i] /= targetCnt[i];
                 targetY[i] /= targetCnt[i];
             }
         }
 
-        for (const auto vt: {VEHICLE_TANK, VEHICLE_IFV, VEHICLE_FIGHTER, VEHICLE_HELICOPTER}) {
-            if (!blobs_[vt].isAlive())
+        for (const auto vt: {VehicleType::TANK, VehicleType::IFV, VehicleType::FIGHTER, VehicleType::HELICOPTER}) {
+            if (!blobs_[(int)vt].isAlive())
                 continue;
 
             const auto tt = getPreferredTargetType(vt, me, world, game);
-            moveQueue_.push(blobs_[vt].select(ctx_));
-            if (tt != _VEHICLE_UNKNOWN_ && targetCnt[tt]) {
-                moveQueue_.push(blobs_[vt].move(ctx_, (targetX[tt] + blobs_[vt].getX())/2., (targetY[tt] + blobs_[vt].getY())/2.));
+            moveQueue_.push(blobs_[(int)vt].select(ctx_));
+            if (tt != VehicleType::_UNKNOWN_ && targetCnt[(int)tt]) {
+                moveQueue_.push(blobs_[(int)vt].move(ctx_, (targetX[(int)tt] + blobs_[(int)vt].getX())/2., (targetY[(int)tt] + blobs_[(int)vt].getY())/2.));
             } else {
-                moveQueue_.push(blobs_[vt].rndWalk(ctx_));
+                moveQueue_.push(blobs_[(int)vt].rndWalk(ctx_));
             }
         }
 
-        if (blobs_[VEHICLE_ARRV].isAlive()) {
-            auto tankHpDeficit = blobs_[VEHICLE_TANK].getHpDeficit(ctx_);
-            auto ifvHpDeficit = blobs_[VEHICLE_IFV].getHpDeficit(ctx_);
-            moveQueue_.push(blobs_[VEHICLE_ARRV].select(ctx_));
+        if (blobs_[(int)VehicleType::ARRV].isAlive()) {
+            auto tankHpDeficit = blobs_[(int)VehicleType::TANK].getHpDeficit(ctx_);
+            auto ifvHpDeficit = blobs_[(int)VehicleType::IFV].getHpDeficit(ctx_);
+            moveQueue_.push(blobs_[(int)VehicleType::ARRV].select(ctx_));
             if (tankHpDeficit > ifvHpDeficit) {
-                moveQueue_.push(blobs_[VEHICLE_ARRV].move(ctx_, blobs_[VEHICLE_TANK].getX(), blobs_[VEHICLE_TANK].getY()));
+                moveQueue_.push(blobs_[(int)VehicleType::ARRV].move(ctx_, blobs_[(int)VehicleType::TANK].getX(), blobs_[(int)VehicleType::TANK].getY()));
             } else if (ifvHpDeficit) {
-                moveQueue_.push(blobs_[VEHICLE_ARRV].move(ctx_, blobs_[VEHICLE_IFV].getX(), blobs_[VEHICLE_IFV].getY()));
+                moveQueue_.push(blobs_[(int)VehicleType::ARRV].move(ctx_, blobs_[(int)VehicleType::IFV].getX(), blobs_[(int)VehicleType::IFV].getY()));
             } else {
                 double x = 0.;
                 double y = 0.;
@@ -595,46 +595,46 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                     x /= cnt;
                     y /= cnt;
                 }
-                moveQueue_.push(blobs_[VEHICLE_ARRV].move(ctx_, x, y));
+                moveQueue_.push(blobs_[(int)VehicleType::ARRV].move(ctx_, x, y));
             }
         }
     }
 }
 
 VehicleType MyStrategy::getPreferredTargetType(VehicleType vehicleType, const model::Player &me, const model::World &, const model::Game &) const {
-    unsigned cnt[_VEHICLE_COUNT_] = {0};
+    unsigned cnt[(int)VehicleType::_COUNT_] = {0};
     for (auto it = vehicles_.cbegin(); it != vehicles_.cend(); ++it) {
         if (it->second.getPlayerId() != me.getId()) {
-            ++cnt[it->second.getType()];
+            ++cnt[(int)it->second.getType()];
         }
     }
 
     switch (vehicleType) {
-        case VEHICLE_FIGHTER: {
-            if (cnt[VEHICLE_FIGHTER]*1.2 > cnt[VEHICLE_HELICOPTER])
-                return VEHICLE_FIGHTER;
+        case VehicleType::FIGHTER: {
+            if (cnt[(int)VehicleType::FIGHTER]*1.2 > cnt[(int)VehicleType::HELICOPTER])
+                return VehicleType::FIGHTER;
             else
-                return VEHICLE_HELICOPTER;
+                return VehicleType::HELICOPTER;
         }
-        case VEHICLE_HELICOPTER:
-            if (cnt[VEHICLE_TANK]) return VEHICLE_TANK;
-            if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
-            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
-            if (cnt[VEHICLE_HELICOPTER]) return VEHICLE_HELICOPTER;
-            return VEHICLE_FIGHTER;
-        case VEHICLE_IFV:
-            if (cnt[VEHICLE_HELICOPTER]) return VEHICLE_HELICOPTER;
-            if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
-            if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
-            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
-            return VEHICLE_TANK;
-        case VEHICLE_TANK:
-            if (cnt[VEHICLE_IFV]) return VEHICLE_IFV;
-            if (cnt[VEHICLE_TANK]) return VEHICLE_TANK;
-            if (cnt[VEHICLE_ARRV]) return VEHICLE_ARRV;
-            if (cnt[VEHICLE_FIGHTER]) return VEHICLE_FIGHTER;
-            return VEHICLE_HELICOPTER;
+        case VehicleType::HELICOPTER:
+            if (cnt[(int)VehicleType::TANK]) return VehicleType::TANK;
+            if (cnt[(int)VehicleType::IFV]) return VehicleType::IFV;
+            if (cnt[(int)VehicleType::ARRV]) return VehicleType::ARRV;
+            if (cnt[(int)VehicleType::HELICOPTER]) return VehicleType::HELICOPTER;
+            return VehicleType::FIGHTER;
+        case VehicleType::IFV:
+            if (cnt[(int)VehicleType::HELICOPTER]) return VehicleType::HELICOPTER;
+            if (cnt[(int)VehicleType::FIGHTER]) return VehicleType::FIGHTER;
+            if (cnt[(int)VehicleType::IFV]) return VehicleType::IFV;
+            if (cnt[(int)VehicleType::ARRV]) return VehicleType::ARRV;
+            return VehicleType::TANK;
+        case VehicleType::TANK:
+            if (cnt[(int)VehicleType::IFV]) return VehicleType::IFV;
+            if (cnt[(int)VehicleType::TANK]) return VehicleType::TANK;
+            if (cnt[(int)VehicleType::ARRV]) return VehicleType::ARRV;
+            if (cnt[(int)VehicleType::FIGHTER]) return VehicleType::FIGHTER;
+            return VehicleType::HELICOPTER;
         default:
-            return _VEHICLE_UNKNOWN_;
+            return VehicleType::_UNKNOWN_;
     }
 }
