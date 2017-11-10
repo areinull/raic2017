@@ -200,6 +200,7 @@ double MyStrategy::distToEnemy() const {
             }
         }
     }
+    return d;
 }
 
 
@@ -215,7 +216,7 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
     }
 
     if (world.getTickIndex() >= 720 &&
-        world.getTickIndex() % 120) {
+        world.getTickIndex() % 120 == 0) {
         if (distToEnemy() > 20.) {
             constexpr double dd_max = 100. * 100.;
             const auto c = center();
