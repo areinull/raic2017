@@ -6,12 +6,31 @@
 #include <cmath>
 #include <cstdlib>
 #include <algorithm>
+#include <iostream>
 
 using namespace model;
 using namespace std;
 
 MyStrategy::MyStrategy() {
     ctx_.vehicleById = &vehicles_;
+}
+
+double MyStrategy::getWeatherVisibility(WeatherType w) const {
+    switch (w) {
+        case WeatherType::CLEAR: return ctx_.game->getClearWeatherVisionFactor();
+        case WeatherType::CLOUD: return ctx_.game->getCloudWeatherVisionFactor();
+        case WeatherType::RAIN:  return ctx_.game->getRainWeatherVisionFactor();
+        default: return 0.;
+    }
+}
+
+double MyStrategy::getTerrainVisibility(TerrainType t) const {
+    switch (t) {
+        case TerrainType::FOREST: return ctx_.game->getForestTerrainVisionFactor();
+        case TerrainType::PLAIN:  return ctx_.game->getPlainTerrainVisionFactor();
+        case TerrainType::SWAMP:  return ctx_.game->getSwampTerrainVisionFactor();
+        default: return 0.;
+    }
 }
 
 void MyStrategy::move(const Player& me, const World& world, const Game& game, Move& move) {
@@ -203,6 +222,92 @@ double MyStrategy::distToEnemy() const {
     return d;
 }
 
+void MyStrategy::nuke() {
+#ifdef MYDEBUG
+    if (ctx_.me->getNextNuclearStrikeTickIndex() > 0) {
+        std::cout << " strike unit is " << (vehicles_.count(ctx_.me->getNextNuclearStrikeVehicleId())? "alive": "dead");
+    }
+#endif
+    if (ctx_.me->getRemainingNuclearStrikeCooldownTicks() > 0) {
+#ifdef MYDEBUG
+        std::cout << " ticks until nuke " << ctx_.me->getRemainingNuclearStrikeCooldownTicks();
+#endif
+        return;
+    }
+
+    const auto c = center();
+    const auto s = span();
+    const auto t = target();
+
+    auto eDir = std::make_pair(t.first - c.first, t.second - c.second);
+    const auto eDirL = std::sqrt(eDir.first*eDir.first + eDir.second*eDir.second);
+    eDir.first /= eDirL;
+    eDir.second /= eDirL;
+
+    const auto quarterSpan = (s.first + s.second)/8.;
+    const auto pointA = std::make_pair(c.first + eDir.first*quarterSpan, c.second + eDir.second*quarterSpan);
+
+    // choose strike vehicle near A
+    int vehicleId = -1;
+    double best_score = std::numeric_limits<double>::max();
+    for (const auto &v: vehicles_) {
+        if (v.second.getPlayerId() != ctx_.me->getId())
+            continue;
+
+        const double visionCoeff = v.second.isAerial()?
+                                   getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.getX()%32][(int)v.second.getY()%32]):
+                                   getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)v.second.getX()%32][(int)v.second.getY()%32]);
+        const double score = v.second.getSquaredDistanceTo(pointA.first, pointA.second) - v.second.getVisionRange()*visionCoeff*v.second.getVisionRange()*visionCoeff;
+        if (score < best_score) {
+            best_score = score;
+            vehicleId = v.first;
+        }
+    }
+    const auto &v = vehicles_[vehicleId];
+
+    // choose strike point
+    const double strikeDistance = v.getVisionRange()*0.9;
+    std::pair<double, double> pointB = t;
+    if (v.getSquaredDistanceTo(t.first, t.second) > strikeDistance*strikeDistance) {
+        auto tDir = std::make_pair(t.first - v.getX(), t.second - v.getY());
+        const auto tDirL = std::sqrt(tDir.first*tDir.first + tDir.second*tDir.second);
+        tDir.first /= tDirL;
+        tDir.second /= tDirL;
+        pointB.first = v.getX() + tDir.first*strikeDistance;
+        pointB.second = v.getY() + tDir.second*strikeDistance;
+    }
+
+    // estimate damage in strike zone
+    double balanceDamage = 0.;
+    for (const auto &v: vehicles_) {
+        const auto d = v.second.getDistanceTo(pointB.first, pointB.second);
+        if ( d > ctx_.game->getTacticalNuclearStrikeRadius())
+            continue;
+        const double dmg = ctx_.game->getMaxTacticalNuclearStrikeDamage() * (1 - d/ctx_.game->getTacticalNuclearStrikeRadius());
+        if (v.second.getPlayerId() == ctx_.me->getId()) {
+            balanceDamage -= dmg;
+        } else {
+            balanceDamage += dmg;
+        }
+    }
+#ifdef MYDEBUG
+    std::cout << " dmg " << balanceDamage;
+#endif
+
+    // strike!
+    if (balanceDamage > 10.*ctx_.game->getMaxTacticalNuclearStrikeDamage()) {
+        Move m;
+        m.setAction(ActionType::TACTICAL_NUCLEAR_STRIKE);
+        m.setX(pointB.first);
+        m.setY(pointB.second);
+        m.setVehicleId(vehicleId);
+        moveQueue_.emplace(0, m);
+#ifdef MYDEBUG
+        std::cout << " strike!";
+#endif
+    }
+}
+
 
 void MyStrategy::move(const Player& me, const World& world, const Game& game) {
     if (world.getTickIndex() == 0) {
@@ -215,36 +320,50 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         congregate();
     }
 
-    if (world.getTickIndex() >= 720 &&
-        world.getTickIndex() % 120 == 0) {
-        if (distToEnemy() > 20.) {
-            constexpr double dd_max = 100. * 100.;
-            const auto c = center();
-            const auto t = target();
-            double dx = t.first - c.first;
-            double dy = t.second - c.second;
-            const double dd = dx * dx + dy * dy;
-            if (dd > dd_max) {
-                const double k = dd_max / dd;
-                dx *= k;
-                dy *= k;
+    if (world.getTickIndex() >= 720) {
+#ifdef MYDEBUG
+        std::cout << "tick: " << world.getTickIndex();
+#endif
+        nuke();
+
+        if (world.getTickIndex() % 120 == 0) {
+            if (distToEnemy() > 20.) {
+                constexpr double dd_max = 100. * 100.;
+                const auto c = center();
+                const auto t = target();
+                double dx = t.first - c.first;
+                double dy = t.second - c.second;
+                const double dd = dx * dx + dy * dy;
+                if (dd > dd_max) {
+                    const double k = dd_max / dd;
+                    dx *= k;
+                    dy *= k;
+                }
+
+                Move m;
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setLeft(0);
+                m.setTop(0);
+                m.setRight(ctx_.world->getWidth());
+                m.setBottom(ctx_.world->getHeight());
+                moveQueue_.emplace(0, m);
+                m.setAction(ActionType::MOVE);
+                m.setX(dx);
+                m.setY(dy);
+                m.setMaxSpeed(game.getTankSpeed());
+                moveQueue_.emplace(0, m);
+#ifdef MYDEBUG
+                std::cout << " move " << dx << ' ' << dy;
+#endif
+            } else {
+                congregate();
+#ifdef MYDEBUG
+                std::cout << " congregate";
+#endif
             }
-
-            Move m;
-            m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setLeft(0);
-            m.setTop(0);
-            m.setRight(ctx_.world->getWidth());
-            m.setBottom(ctx_.world->getHeight());
-            moveQueue_.emplace(0, m);
-            m.setAction(ActionType::MOVE);
-            m.setX(dx);
-            m.setY(dy);
-            m.setMaxSpeed(game.getTankSpeed());
-            moveQueue_.emplace(0, m);
-        } else {
-            congregate();
         }
+#ifdef MYDEBUG
+        std::cout << std::endl;
+#endif
     }
-
 }

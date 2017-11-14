@@ -25,6 +25,9 @@ private:
     std::pair<double,double> span() const;
     std::pair<double, double> target() const;
     double distToEnemy() const;
+    void nuke();
+    double getWeatherVisibility(model::WeatherType w) const;
+    double getTerrainVisibility(model::TerrainType t) const;
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;
