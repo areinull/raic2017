@@ -322,9 +322,33 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
 
     if (world.getTickIndex() >= 720) {
 #ifdef MYDEBUG
-        std::cout << "tick: " << world.getTickIndex();
+        std::cout << "tick: " << world.getTickIndex() << " arState: " << antiReconState_;
 #endif
+
+        if (antiReconState_) {
+            if (--antiReconDelay_ > 0) {
+#ifdef MYDEBUG
+                std::cout << " antiReconDelay: " << antiReconDelay_ << std::endl;
+#endif
+            } else {
+                detectRecon(false);
+                attackRecon();
+            }
+#ifdef MYDEBUG
+            std::cout << std::endl;
+#endif
+            return;
+        }
+
         nuke();
+
+        if (detectRecon(true))
+            return;
+
+        if (needCongregate_) {
+            needCongregate_ = false;
+            congregate();
+        }
 
         if (world.getTickIndex() % 120 == 0) {
             if (distToEnemy() > 20.) {
@@ -366,4 +390,150 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
         std::cout << std::endl;
 #endif
     }
+}
+
+bool MyStrategy::detectRecon(bool select) {
+    std::pair<double, double> c;
+    {
+        double x = 0.;
+        double y = 0.;
+        int cnt = 0;
+        for (const auto &v: vehicles_) {
+            if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial()) {
+                x += v.second.getX();
+                y += v.second.getY();
+                ++cnt;
+            }
+        }
+        if (cnt) {
+            x /= cnt;
+            y /= cnt;
+        }
+        c.first = x;
+        c.second = y;
+    }
+    const auto t = target();
+    const auto s = span();
+
+    const double leftBorder = c.first - s.first/2. - ctx_.game->getFighterVisionRange()*2.;
+    const double rightBorder = c.first + s.first/2. + ctx_.game->getFighterVisionRange()*2.;
+    const double topBorder = c.second - s.second/2. - ctx_.game->getFighterVisionRange()*2.;
+    const double bottomBorder = c.second + s.second/2. + ctx_.game->getFighterVisionRange()*2.;
+
+    enemyRecon_.clear();
+
+    if (t.first > leftBorder && t.first < rightBorder && t.second > topBorder && t.second < bottomBorder) {
+        return antiReconState_;
+    }
+
+    for (const auto &v: vehicles_) {
+        if (v.second.getPlayerId() == ctx_.me->getId())
+            continue;
+        if (v.second.getX() > leftBorder && v.second.getX() < rightBorder && v.second.getY() > topBorder && v.second.getY() < bottomBorder) {
+            enemyRecon_.insert(v.first);
+        }
+    }
+
+    if (!enemyRecon_.empty() && enemyRecon_.size() < 20) {
+        antiReconState_ = true;
+        antiReconDelay_ = 0;
+
+        if (select) {
+            Move m;
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setLeft(0);
+            m.setTop(0);
+            m.setRight(ctx_.world->getWidth());
+            m.setBottom((ctx_.world->getHeight()));
+            m.setVehicleType(VehicleType::FIGHTER);
+            moveQueue_.emplace(0, m);
+            m.setAction(ActionType::ADD_TO_SELECTION);
+            m.setVehicleType(VehicleType::HELICOPTER);
+            moveQueue_.emplace(0, m);
+        }
+    } else {
+        enemyRecon_.clear();
+    }
+#ifdef MYDEBUG
+    std::cout << " detectRecon() found units: " << enemyRecon_.size();
+#endif
+
+    return antiReconState_;
+}
+
+void MyStrategy::attackRecon() {
+    int ev = -1;
+    for (const int evt: enemyRecon_) {
+        if (vehicles_.count(evt)) {
+            ev = evt;
+            break;
+        }
+    }
+
+    std::pair<double, double> ac;
+    {
+        double x = 0.;
+        double y = 0.;
+        int cnt = 0;
+        for (const auto &v: vehicles_) {
+            if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial()) {
+                x += v.second.getX();
+                y += v.second.getY();
+                ++cnt;
+            }
+        }
+        if (cnt) {
+            x /= cnt;
+            y /= cnt;
+        }
+        ac.first = x;
+        ac.second = y;
+    }
+
+    if (ev < 0) {
+        std::pair<double, double> gc;
+        {
+            double x = 0.;
+            double y = 0.;
+            int cnt = 0;
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial()) {
+                    x += v.second.getX();
+                    y += v.second.getY();
+                    ++cnt;
+                }
+            }
+            if (cnt) {
+                x /= cnt;
+                y /= cnt;
+            }
+            gc.first = x;
+            gc.second = y;
+        }
+
+        if ((gc.first-ac.first)*(gc.first-ac.first) + (gc.second-ac.second)*(gc.second-ac.second) < 512.) {
+            antiReconState_ = false;
+            needCongregate_ = true;
+        }
+
+        Move m;
+        m.setAction(ActionType::MOVE);
+        m.setX(gc.first - ac.first);
+        m.setY(gc.second - ac.second);
+        moveQueue_.emplace(0, m);
+        antiReconDelay_ = 30;
+        return;
+    }
+
+#ifdef MYDEBUG
+    std::cout << " attackRecon()";
+#endif
+
+    Move m;
+
+    m.setAction(ActionType::MOVE);
+    m.setX((vehicles_[ev].getX() - ac.first)*1.1);
+    m.setY((vehicles_[ev].getY() - ac.second)*1.1);
+    moveQueue_.emplace(0, m);
+    antiReconDelay_ = 30;
 }

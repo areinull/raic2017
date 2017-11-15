@@ -4,6 +4,7 @@
 #define _MY_STRATEGY_H_
 
 #include <queue>
+#include <unordered_set>
 #include "Strategy.h"
 #include "Context.h"
 
@@ -28,10 +29,16 @@ private:
     void nuke();
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
+    bool detectRecon(bool select);
+    void attackRecon();
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;
     Context ctx_;
+    std::unordered_set<int> enemyRecon_;
+    bool antiReconState_ = false;
+    int antiReconDelay_ = -1;
+    bool needCongregate_ = false;
 };
 
 #endif
