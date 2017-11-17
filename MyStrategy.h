@@ -33,15 +33,17 @@ private:
     bool detectRecon(bool select);
     void attackRecon();
 
-    void startupFormation();
+    bool startupFormation();
 
     VehicleById vehicles_;
+    UpdateTickByVehicleId vehiclesUpdateTick_;
     MoveQueue moveQueue_;
     Context ctx_;
-    std::unordered_set<int> enemyRecon_;
+    std::unordered_set<long long> enemyRecon_;
     bool antiReconState_ = false;
     int antiReconDelay_ = -1;
     bool needCongregate_ = false;
+    double slowestGroundSpeed_;
 };
 
 #endif

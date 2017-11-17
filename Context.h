@@ -12,7 +12,7 @@ namespace model {
     class Vehicle;
 }
 
-using VehicleById = std::unordered_map<int, model::Vehicle>;
+using VehicleById = std::unordered_map<long long, model::Vehicle>;
 
 struct Context {
     const model::Player *me;
