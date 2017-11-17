@@ -3,14 +3,14 @@
 #ifndef _MY_STRATEGY_H_
 #define _MY_STRATEGY_H_
 
-#include <queue>
+#include <map>
 #include <unordered_set>
 #include "Strategy.h"
 #include "Context.h"
 
 class MyStrategy : public Strategy {
     using UpdateTickByVehicleId = std::unordered_map<long long, int>;
-    using MoveQueue = std::queue<std::pair<int,model::Move>>;
+    using MoveQueue = std::multimap<int,model::Move>;
 
 public:
     MyStrategy();
@@ -19,6 +19,7 @@ public:
 private:
     void initializeStrategy(const model::Game &game);
     void initializeTick(const model::Player &me, const model::World &world, const model::Game &game, const model::Move &move);
+    void queueMove(int delay, const model::Move &m);
     bool executeDelayedMove(model::Move& move);
     void move(const model::Player& me, const model::World& world, const model::Game& game);
     void congregate();
@@ -31,6 +32,8 @@ private:
     double getTerrainVisibility(model::TerrainType t) const;
     bool detectRecon(bool select);
     void attackRecon();
+
+    void startupFormation();
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;

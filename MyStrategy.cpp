@@ -11,6 +11,19 @@
 using namespace model;
 using namespace std;
 
+std::ostream& operator<<(std::ostream &s, VehicleType vt) {
+    switch (vt) {
+        case VehicleType::_UNKNOWN_:  s << "VehicleType::_UNKNOWN_"; break;
+        case VehicleType::ARRV:       s << "VehicleType::ARRV"; break;
+        case VehicleType::IFV:        s << "VehicleType::IFV"; break;
+        case VehicleType::TANK:       s << "VehicleType::TANK"; break;
+        case VehicleType::HELICOPTER: s << "VehicleType::HELICOPTER"; break;
+        case VehicleType::FIGHTER:    s << "VehicleType::FIGHTER"; break;
+        case VehicleType::_COUNT_:    s << "VehicleType::_COUNT_"; break;
+    }
+    return s;
+}
+
 MyStrategy::MyStrategy() {
     ctx_.vehicleById = &vehicles_;
 }
@@ -81,11 +94,9 @@ bool MyStrategy::executeDelayedMove(Move& move) {
     if (moveQueue_.empty())
         return false;
 
-    if (moveQueue_.front().first > 0) {
-        --moveQueue_.front().first;
-    } else {
-        move = moveQueue_.front().second;
-        moveQueue_.pop();
+    if (moveQueue_.begin()->first <= ctx_.world->getTickIndex()) {
+        move = moveQueue_.begin()->second;
+        moveQueue_.erase(moveQueue_.begin());
     }
 
     return true;
@@ -155,44 +166,44 @@ void MyStrategy::congregate() {
     m.setTop(0);
     m.setRight(c.first);
     m.setBottom(c.second);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
     m.setAction(ActionType::MOVE);
     m.setX(s.first/2);
     m.setY(s.second/2);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
 
     m.setAction(ActionType::CLEAR_AND_SELECT);
     m.setLeft(c.first);
     m.setTop(0);
     m.setRight(ctx_.world->getWidth());
     m.setBottom(c.second);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
     m.setAction(ActionType::MOVE);
     m.setX(-s.first/2);
     m.setY(s.second/2);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
 
     m.setAction(ActionType::CLEAR_AND_SELECT);
     m.setLeft(c.first);
     m.setTop(c.second);
     m.setRight(ctx_.world->getWidth());
     m.setBottom(ctx_.world->getHeight());
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
     m.setAction(ActionType::MOVE);
     m.setX(-s.first/2);
     m.setY(-s.second/2);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
 
     m.setAction(ActionType::CLEAR_AND_SELECT);
     m.setLeft(0);
     m.setTop(c.second);
     m.setRight(c.first);
     m.setBottom(ctx_.world->getHeight());
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
     m.setAction(ActionType::MOVE);
     m.setX(s.first/2);
     m.setY(-s.second/2);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
 
     // вращение
     m.setAction(ActionType::CLEAR_AND_SELECT);
@@ -200,12 +211,12 @@ void MyStrategy::congregate() {
     m.setTop(0);
     m.setRight(ctx_.world->getWidth());
     m.setBottom(ctx_.world->getHeight());
-    moveQueue_.emplace(120, m);
+    queueMove(120, m);
     m.setAction(ActionType::ROTATE);
     m.setX(c.first);
     m.setY(c.second);
     m.setAngle(angle);
-    moveQueue_.emplace(0, m);
+    queueMove(120, m);
 }
 
 double MyStrategy::distToEnemy() const {
@@ -301,7 +312,7 @@ void MyStrategy::nuke() {
         m.setX(pointB.first);
         m.setY(pointB.second);
         m.setVehicleId(vehicleId);
-        moveQueue_.emplace(0, m);
+        queueMove(0, m);
 #ifdef MYDEBUG
         std::cout << " strike!";
 #endif
@@ -310,6 +321,11 @@ void MyStrategy::nuke() {
 
 
 void MyStrategy::move(const Player& me, const World& world, const Game& game) {
+    if (world.getTickIndex() == 0) {
+        startupFormation();
+    }
+    return;
+
     if (world.getTickIndex() == 0) {
         congregate();
     }
@@ -370,12 +386,12 @@ void MyStrategy::move(const Player& me, const World& world, const Game& game) {
                 m.setTop(0);
                 m.setRight(ctx_.world->getWidth());
                 m.setBottom(ctx_.world->getHeight());
-                moveQueue_.emplace(0, m);
+                queueMove(0, m);
                 m.setAction(ActionType::MOVE);
                 m.setX(dx);
                 m.setY(dy);
                 m.setMaxSpeed(game.getTankSpeed());
-                moveQueue_.emplace(0, m);
+                queueMove(0, m);
 #ifdef MYDEBUG
                 std::cout << " move " << dx << ' ' << dy;
 #endif
@@ -446,10 +462,10 @@ bool MyStrategy::detectRecon(bool select) {
             m.setRight(ctx_.world->getWidth());
             m.setBottom((ctx_.world->getHeight()));
             m.setVehicleType(VehicleType::FIGHTER);
-            moveQueue_.emplace(0, m);
+            queueMove(0, m);
             m.setAction(ActionType::ADD_TO_SELECTION);
             m.setVehicleType(VehicleType::HELICOPTER);
-            moveQueue_.emplace(0, m);
+            queueMove(0, m);
         }
     } else {
         enemyRecon_.clear();
@@ -520,7 +536,7 @@ void MyStrategy::attackRecon() {
         m.setAction(ActionType::MOVE);
         m.setX(gc.first - ac.first);
         m.setY(gc.second - ac.second);
-        moveQueue_.emplace(0, m);
+        queueMove(0, m);
         antiReconDelay_ = 30;
         return;
     }
@@ -534,6 +550,162 @@ void MyStrategy::attackRecon() {
     m.setAction(ActionType::MOVE);
     m.setX((vehicles_[ev].getX() - ac.first)*1.1);
     m.setY((vehicles_[ev].getY() - ac.second)*1.1);
-    moveQueue_.emplace(0, m);
+    queueMove(0, m);
     antiReconDelay_ = 30;
+}
+
+void MyStrategy::startupFormation() {
+    std::array<VehicleType, 3> grNum{VehicleType::TANK, VehicleType::IFV, VehicleType::ARRV};
+    std::map<VehicleType, int> type2idx {
+            {VehicleType::TANK, 0},
+            {VehicleType::IFV,  1},
+            {VehicleType::ARRV, 2}
+    };
+    int delay = 0;
+
+    std::array<std::pair<double, double>, 3> grPos;
+    grPos.fill(std::make_pair(0., 0.));
+
+    for (const auto &v: vehicles_) {
+        if (v.second.getPlayerId() != ctx_.me->getId())
+            continue;
+        switch (v.second.getType()) {
+            case VehicleType::TANK:
+            case VehicleType::IFV:
+            case VehicleType::ARRV:
+                break;
+            default: continue;
+        }
+        auto &pos = grPos[type2idx[v.second.getType()]];
+        pos.first += v.second.getX()/100.;
+        pos.second += v.second.getY()/100.;
+    }
+
+    {
+        int firstGr = 0;
+        double minY = grPos[0].second;
+        for (int i: {1, 2}) {
+            if (grPos[i].second < minY) {
+                minY = grPos[i].second;
+                firstGr = i;
+            }
+        }
+        double minX = grPos[firstGr].first;
+        for (int i: {(firstGr+1)%3, (firstGr+2)%3}) {
+            if (grPos[i].second <= minY && grPos[i].first < minX) {
+                minX = grPos[i].first;
+                firstGr = i;
+            }
+        }
+        std::swap(grNum[0], grNum[firstGr]);
+        std::swap(grPos[0], grPos[firstGr]);
+
+        if (grPos[1].second > grPos[2].second || grPos[1].first < grPos[2].first) {
+            std::swap(grNum[2], grNum[1]);
+            std::swap(grPos[2], grPos[1]);
+        }
+
+        for (int i=0; i<3; ++i) {
+            type2idx[grNum[i]] = i;
+        }
+    }
+
+    for (auto vt: grNum) {
+        double left = ctx_.world->getWidth();
+        double right = 0.;
+        for (const auto &v: vehicles_) {
+            if (v.second.getPlayerId() != ctx_.me->getId() || v.second.getType() != vt)
+                continue;
+            left = std::min(left, v.second.getX());
+            right = std::max(right, v.second.getX());
+        }
+        const double spacing = (right - left)/9.;
+
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setTop(0);
+        m.setRight(ctx_.world->getWidth());
+        m.setBottom(ctx_.world->getHeight());
+        m.setVehicleType(vt);
+        queueMove(delay, m);
+
+        m.setAction(ActionType::SCALE);
+        m.setX(grPos[type2idx[vt]].first);
+        m.setY(grPos[type2idx[vt]].second);
+        m.setFactor(5./spacing);
+        queueMove(delay, m);
+    }
+
+    delay += 200;
+    {
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setTop(0);
+        m.setRight(ctx_.world->getWidth());
+        m.setBottom(ctx_.world->getHeight());
+        m.setVehicleType(grNum[0]);
+        queueMove(delay, m);
+
+        m.setAction(ActionType::MOVE);
+        m.setX(100. - grPos[0].first);
+        m.setY(100. - grPos[0].second);
+        queueMove(delay, m);
+        grPos[0] = {100., 100.};
+    }
+    {
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setTop(0);
+        m.setRight(ctx_.world->getWidth());
+        m.setBottom(ctx_.world->getHeight());
+        m.setVehicleType(grNum[1]);
+        queueMove(delay, m);
+
+        m.setAction(ActionType::MOVE);
+        m.setX(grPos[0].first + 50. - grPos[1].first);
+        m.setY(grPos[0].second + 150. - grPos[1].second);
+        queueMove(delay, m);
+        grPos[1] = {grPos[0].first + 50., grPos[0].second + 150.};
+    }
+    {
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setTop(0);
+        m.setRight(ctx_.world->getWidth());
+        m.setBottom(ctx_.world->getHeight());
+        m.setVehicleType(grNum[2]);
+        queueMove(delay, m);
+
+        m.setAction(ActionType::MOVE);
+        m.setX(grPos[0].first - grPos[2].first);
+        m.setY(grPos[1].second + 150. - grPos[2].second);
+        queueMove(delay, m);
+        grPos[2] = {grPos[0].first, grPos[1].second + 150.};
+    }
+
+    delay += 800;
+    for (auto vt: grNum) {
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setTop(0);
+        m.setRight(ctx_.world->getWidth());
+        m.setBottom(ctx_.world->getHeight());
+        m.setVehicleType(vt);
+        queueMove(delay, m);
+
+        m.setAction(ActionType::SCALE);
+        m.setX(grPos[type2idx[vt]].first);
+        m.setY(grPos[type2idx[vt]].second);
+        m.setFactor(3.);
+        queueMove(delay, m);
+    }
+}
+
+void MyStrategy::queueMove(int delay, const Move &m){
+    moveQueue_.emplace(ctx_.world->getTickIndex() + delay, m);
 }
