@@ -11,6 +11,7 @@
 class MyStrategy : public Strategy {
     using UpdateTickByVehicleId = std::unordered_map<long long, int>;
     using MoveQueue = std::multimap<int,model::Move>;
+    using VehicleSet = std::unordered_set<long long>;
 
 public:
     MyStrategy();
@@ -21,28 +22,26 @@ private:
     void initializeTick(const model::Player &me, const model::World &world, const model::Game &game, const model::Move &move);
     void queueMove(int delay, const model::Move &m);
     bool executeDelayedMove(model::Move& move);
-    void move(const model::Player& me, const model::World& world, const model::Game& game);
-    void congregate();
+    void move();
     std::pair<double, double> center() const;
     std::pair<double,double> span() const;
     std::pair<double, double> target() const;
-    double distToEnemy() const;
-    void nuke();
+    void nuke(const std::pair<double, double> &grPos, std::pair<double, double> &nukePos, long long &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
-    bool detectRecon(bool select);
-    void attackRecon();
+    VehicleSet detectRecon(bool isAir);
 
-    bool startupFormation();
+    bool startupGroundFormation();
+    bool mainGround();
+    bool mainHeli();
+    bool mainFighter();
+    double clampX(double x) const;
+    double clampY(double y) const;
 
     VehicleById vehicles_;
     UpdateTickByVehicleId vehiclesUpdateTick_;
     MoveQueue moveQueue_;
     Context ctx_;
-    std::unordered_set<long long> enemyRecon_;
-    bool antiReconState_ = false;
-    int antiReconDelay_ = -1;
-    bool needCongregate_ = false;
     double slowestGroundSpeed_;
 };
 
