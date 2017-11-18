@@ -23,8 +23,6 @@ private:
     void queueMove(int delay, const model::Move &m);
     bool executeDelayedMove(model::Move& move);
     void move();
-    std::pair<double, double> center() const;
-    std::pair<double,double> span() const;
     std::pair<double, double> target() const;
     void nuke(const std::pair<double, double> &grPos, std::pair<double, double> &nukePos, long long &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;

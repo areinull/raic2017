@@ -111,24 +111,6 @@ bool MyStrategy::executeDelayedMove(Move& move) {
     return true;
 }
 
-std::pair<double, double> MyStrategy::center() const {
-    double x = 0.;
-    double y = 0.;
-    int cnt = 0;
-    for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId()) {
-            x += v.second.getX();
-            y += v.second.getY();
-            ++cnt;
-        }
-    }
-    if (cnt) {
-        x /= cnt;
-        y /= cnt;
-    }
-    return {x, y};
-}
-
 std::pair<double, double> MyStrategy::target() const {
     double x = 0.;
     double y = 0.;
@@ -145,22 +127,6 @@ std::pair<double, double> MyStrategy::target() const {
         y /= cnt;
     }
     return {x, y};
-}
-
-std::pair<double,double> MyStrategy::span() const {
-    double x_min = ctx_.world->getWidth();
-    double x_max = 0.;
-    double y_min = ctx_.world->getHeight();
-    double y_max = 0.;
-    for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId()) {
-            x_min = std::min(x_min, v.second.getX());
-            x_max = std::max(x_max, v.second.getX());
-            y_min = std::min(y_min, v.second.getY());
-            y_max = std::max(y_max, v.second.getY());
-        }
-    }
-    return {x_max-x_min, y_max-y_min};
 }
 
 void MyStrategy::nuke(const std::pair<double, double> &c, std::pair<double, double> &nukePos, long long &strikeUnit) {
@@ -234,89 +200,6 @@ void MyStrategy::move() {
     startupGroundFormation() || mainGround();
     mainFighter();
     mainHeli();
-    return;
-/*
-    if (world.getTickIndex() == 0) {
-        congregate();
-    }
-    if (world.getTickIndex() == 240) {
-        congregate();
-    }
-    if (world.getTickIndex() == 480) {
-        congregate();
-    }
-
-    if (world.getTickIndex() >= 720) {
-#ifdef MYDEBUG
-        std::cout << "tick: " << world.getTickIndex() << " arState: " << antiReconState_;
-#endif
-
-        if (antiReconState_) {
-            if (--antiReconDelay_ > 0) {
-#ifdef MYDEBUG
-                std::cout << " antiReconDelay: " << antiReconDelay_ << std::endl;
-#endif
-            } else {
-                detectRecon(false);
-                attackRecon();
-            }
-#ifdef MYDEBUG
-            std::cout << std::endl;
-#endif
-            return;
-        }
-
-        nuke();
-
-        if (detectRecon(true))
-            return;
-
-        if (needCongregate_) {
-            needCongregate_ = false;
-            congregate();
-        }
-
-        if (world.getTickIndex() % 120 == 0) {
-            if (distToEnemy() > 20.) {
-                constexpr double dd_max = 100. * 100.;
-                const auto c = center();
-                const auto t = target();
-                double dx = t.first - c.first;
-                double dy = t.second - c.second;
-                const double dd = dx * dx + dy * dy;
-                if (dd > dd_max) {
-                    const double k = dd_max / dd;
-                    dx *= k;
-                    dy *= k;
-                }
-
-                Move m;
-                m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setLeft(0);
-                m.setTop(0);
-                m.setRight(ctx_.world->getWidth());
-                m.setBottom(ctx_.world->getHeight());
-                queueMove(0, m);
-                m.setAction(ActionType::MOVE);
-                m.setX(dx);
-                m.setY(dy);
-                m.setMaxSpeed(game.getTankSpeed());
-                queueMove(0, m);
-#ifdef MYDEBUG
-                std::cout << " move " << dx << ' ' << dy;
-#endif
-            } else {
-                congregate();
-#ifdef MYDEBUG
-                std::cout << " congregate";
-#endif
-            }
-        }
-#ifdef MYDEBUG
-        std::cout << std::endl;
-#endif
-    }
-    */
 }
 
 MyStrategy::VehicleSet MyStrategy::detectRecon(bool isAir) {
@@ -672,7 +555,7 @@ bool MyStrategy::startupGroundFormation() {
             m.setX(grPos[1].first);
             m.setY(grPos[1].second);
             m.setFactor(1.1);
-            m.setMaxSpeed(slowestGroundSpeed_);
+//            m.setMaxSpeed(slowestGroundSpeed_);
             queueMove(0, m);
 
             m.setAction(ActionType::ASSIGN);
@@ -723,7 +606,7 @@ bool MyStrategy::startupGroundFormation() {
             m.setAction(ActionType::MOVE);
             m.setX(0);
             m.setY(-512.);
-            m.setMaxSpeed(slowestGroundSpeed_);
+//            m.setMaxSpeed(slowestGroundSpeed_);
             queueMove(0, m);
 
             state = State::FinalScale;
@@ -748,7 +631,7 @@ bool MyStrategy::startupGroundFormation() {
             m.setX(pos.first);
             m.setY(pos.second);
             m.setFactor(0.5);
-            m.setMaxSpeed(slowestGroundSpeed_);
+//            m.setMaxSpeed(slowestGroundSpeed_);
             queueMove(0, m);
 
             state = State::End;
@@ -1197,7 +1080,7 @@ bool MyStrategy::mainFighter() {
                     state = State::Move;
                 }
             }
-            return mainHeli();
+            return mainFighter();
         }
 
         case State::Converge: {
