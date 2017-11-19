@@ -10,6 +10,8 @@
 
 class MyStrategy : public Strategy {
     using UpdateTickByVehicleId = std::unordered_map<long long, int>;
+    using VehiclePrevPos = std::unordered_map<long long, std::pair<double, double>>;
+    using VehicleMoved = std::unordered_map<long long, bool>;
     using MoveQueue = std::multimap<int,model::Move>;
     using VehicleSet = std::unordered_set<long long>;
 
@@ -35,12 +37,15 @@ private:
     bool mainFighter();
     double clampX(double x) const;
     double clampY(double y) const;
+    bool antiNuke();
 
     VehicleById vehicles_;
     UpdateTickByVehicleId vehiclesUpdateTick_;
     MoveQueue moveQueue_;
     Context ctx_;
     double slowestGroundSpeed_;
+    VehiclePrevPos vehiclePrevPos_;
+    VehicleMoved vehicleMoved_;
 };
 
 #endif

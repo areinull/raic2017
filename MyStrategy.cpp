@@ -81,9 +81,15 @@ void MyStrategy::initializeTick(const Player &me, const World &world, const Game
     ctx_.world = &world;
     ctx_.game = &game;
 
+    for (auto &v: vehicleMoved_) {
+        v.second = false;
+    }
+
     for (const auto &vehicle : world.getNewVehicles()) {
         vehicles_[vehicle.getId()] = vehicle;
         vehiclesUpdateTick_[vehicle.getId()] = world.getTickIndex();
+        vehiclePrevPos_[vehicle.getId()] = {vehicle.getX(), vehicle.getY()};
+        vehicleMoved_[vehicle.getId()] = false;
     }
 
     for (const auto &vehicleUpdate : world.getVehicleUpdates()) {
@@ -92,9 +98,14 @@ void MyStrategy::initializeTick(const Player &me, const World &world, const Game
         if (vehicleUpdate.getDurability() == 0) {
             vehicles_.erase(vehicleId);
             vehiclesUpdateTick_.erase(vehicleId);
+            vehiclePrevPos_.erase(vehicleId);
+            vehicleMoved_.erase(vehicleId);
         } else {
             vehicles_[vehicleId] = Vehicle(vehicles_[vehicleId], vehicleUpdate);
             vehiclesUpdateTick_[vehicleId] = world.getTickIndex();
+            vehicleMoved_[vehicleId] = vehicleUpdate.getX() != vehiclePrevPos_[vehicleId].first ||
+                                       vehicleUpdate.getY() != vehiclePrevPos_[vehicleId].second;
+            vehiclePrevPos_[vehicleId] = {vehicleUpdate.getX(), vehicleUpdate.getY()};
         }
     }
 }
@@ -197,6 +208,9 @@ void MyStrategy::nuke(const std::pair<double, double> &c, std::pair<double, doub
 
 
 void MyStrategy::move() {
+    if (antiNuke()) {
+        return;
+    }
     startupGroundFormation() || mainGround();
     mainFighter();
     mainHeli();
@@ -272,7 +286,7 @@ bool MyStrategy::startupGroundFormation() {
         return false;
 
     for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial() && ctx_.world->getTickIndex() - vehiclesUpdateTick_[v.first] < 10) {
+        if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial() && vehicleMoved_[v.first]) {
             // юниты ещё перемещаются
             return true;
         }
@@ -679,8 +693,7 @@ bool MyStrategy::mainGround() {
 
     if (state != State::NukeStrike) {
         for (const auto &v: vehicles_) {
-            if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial() &&
-                ctx_.world->getTickIndex() - vehiclesUpdateTick_[v.first] < 10) {
+            if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial() && vehicleMoved_[v.first]) {
                 // юниты ещё перемещаются
                 return true;
             }
@@ -842,8 +855,7 @@ bool MyStrategy::mainHeli() {
         return false;
 
     for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == VehicleType::HELICOPTER &&
-            ctx_.world->getTickIndex() - vehiclesUpdateTick_[v.first] < 10) {
+        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == VehicleType::HELICOPTER && vehicleMoved_[v.first]) {
             // юниты ещё перемещаются
             return true;
         }
@@ -1032,8 +1044,7 @@ bool MyStrategy::mainFighter() {
         return false;
 
     for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == VehicleType::FIGHTER &&
-            ctx_.world->getTickIndex() - vehiclesUpdateTick_[v.first] < 10) {
+        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == VehicleType::FIGHTER && vehicleMoved_[v.first]) {
             // юниты ещё перемещаются
             return true;
         }
@@ -1211,4 +1222,81 @@ double MyStrategy::clampX(double x) const {
 
 double MyStrategy::clampY(double y) const {
     return std::max(0., std::min(ctx_.world->getHeight(), y));
+}
+
+bool MyStrategy::antiNuke() {
+    enum class State {
+        Idle,
+        Spread,
+        Converge
+    };
+    static auto state = State::Idle;
+    static int moveCnt = 0;
+    static std::pair<double, double> nukePos{-1., -1.};
+
+    switch (state) {
+        case State::Idle: {
+            if (ctx_.world->getOpponentPlayer().getNextNuclearStrikeTickIndex() < 0) {
+                return false;
+            }
+            state = State::Spread;
+            return antiNuke();
+        }
+
+        case State::Spread: {
+            if (ctx_.world->getOpponentPlayer().getNextNuclearStrikeTickIndex() > 0) {
+                if (!moveCnt) {
+                    nukePos.first = ctx_.world->getOpponentPlayer().getNextNuclearStrikeX();
+                    nukePos.second = ctx_.world->getOpponentPlayer().getNextNuclearStrikeY();
+
+                    Move m;
+                    m.setAction(ActionType::CLEAR_AND_SELECT);
+                    m.setLeft(0);
+                    m.setTop(0);
+                    m.setRight(ctx_.world->getWidth());
+                    m.setBottom(ctx_.world->getHeight());
+                    queueMove(0, m);
+
+                    m.setAction(ActionType::SCALE);
+                    m.setX(nukePos.first);
+                    m.setY(nukePos.second);
+                    m.setFactor(10);
+                    queueMove(0, m);
+                }
+                ++moveCnt;
+            } else {
+                state = State::Converge;
+                return antiNuke();
+            }
+        }
+        break;
+
+        case State::Converge: {
+            if (!moveCnt) {
+                state = State::Idle;
+                return false;
+            }
+            if (nukePos.first >= 0) {
+                Move m;
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setLeft(0);
+                m.setTop(0);
+                m.setRight(ctx_.world->getWidth());
+                m.setBottom(ctx_.world->getHeight());
+                queueMove(0, m);
+
+                m.setAction(ActionType::SCALE);
+                m.setX(nukePos.first);
+                m.setY(nukePos.second);
+                m.setFactor(0.1);
+                queueMove(0, m);
+
+                nukePos = {-1., -1.};
+            }
+            --moveCnt;
+        }
+        break;
+    }
+
+    return true;
 }
