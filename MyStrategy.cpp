@@ -208,12 +208,15 @@ void MyStrategy::nuke(const std::pair<double, double> &c, std::pair<double, doub
 
 
 void MyStrategy::move() {
+    startupGroundFormation2();
+    /*
     if (antiNuke()) {
         return;
     }
     startupGroundFormation() || mainGround();
     mainFighter();
     mainHeli();
+     */
 }
 
 MyStrategy::VehicleSet MyStrategy::detectRecon(bool isAir) {
@@ -1298,5 +1301,144 @@ bool MyStrategy::antiNuke() {
         break;
     }
 
+    return true;
+}
+
+bool MyStrategy::startupGroundFormation2() {
+    enum class State {
+        Init,
+        XArrange,
+        YArrange,
+        End
+    };
+    static auto state{State::Init};
+
+    static std::array<VehicleType, 3> grNum{VehicleType::TANK, VehicleType::IFV, VehicleType::ARRV};
+    static std::map<VehicleType, int> type2idx{
+            {VehicleType::TANK, 0},
+            {VehicleType::IFV,  1},
+            {VehicleType::ARRV, 2}
+    };
+    static std::array<std::pair<double, double>, 3> grPos;
+
+    if (state == State::End)
+        return false;
+
+    for (const auto &v: vehicles_) {
+        if (v.second.getPlayerId() == ctx_.me->getId() && !v.second.isAerial() && vehicleMoved_[v.first]) {
+            // юниты ещё перемещаются
+            return true;
+        }
+    }
+
+    switch (state) {
+        case State::Init: {
+            grPos.fill(std::make_pair(0., 0.));
+
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() != ctx_.me->getId())
+                    continue;
+                switch (v.second.getType()) {
+                    case VehicleType::TANK:
+                    case VehicleType::IFV:
+                    case VehicleType::ARRV:
+                        break;
+                    default:
+                        continue;
+                }
+                auto &pos = grPos[type2idx[v.second.getType()]];
+                pos.first += v.second.getX() / 100.;
+                pos.second += v.second.getY() / 100.;
+            }
+
+
+            {
+                int firstGr = 0;
+                double minX = grPos[0].first;
+                for (int i: {1, 2}) {
+                    if (grPos[i].first < minX) {
+                        minX = grPos[i].first;
+                        firstGr = i;
+                    }
+                }
+                std::swap(grNum[0], grNum[firstGr]);
+                std::swap(grPos[0], grPos[firstGr]);
+
+                if (grPos[1].first > grPos[2].first) {
+                    std::swap(grNum[1], grNum[2]);
+                    std::swap(grPos[1], grPos[2]);
+                }
+
+                for (int i = 0; i < 3; ++i) {
+                    type2idx[grNum[i]] = i;
+                }
+            }
+
+            state = State::XArrange;
+            return startupGroundFormation2();
+        }
+
+        case State::XArrange: {
+            const double xMid = std::max(grPos[1].first, 110.);
+            const double xCenter[] = {xMid - 70., xMid, xMid + 70.};
+
+            for (int i: {0, 2})  {
+                std::cout << grPos[i].first << " -> " << xCenter[i] << std::endl;
+
+                Move m;
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setLeft(0);
+                m.setTop(0);
+                m.setRight(ctx_.world->getWidth());
+                m.setBottom(ctx_.world->getHeight());
+                m.setVehicleType(grNum[i]);
+                queueMove(0, m);
+
+                m.setAction(ActionType::MOVE);
+                m.setX(xCenter[i] - grPos[i].first);
+                m.setY(0);
+                queueMove(0, m);
+                grPos[i].first = xCenter[i];
+            }
+
+            state = State::YArrange;
+        }
+        break;
+
+        case State::YArrange: {
+            double yLines[10] = {10.};
+            for (unsigned i=1; i<10; ++i) {
+                yLines[i] = yLines[i-1] + 15.;
+            }
+            const double yShift[] = {-5., 0., 5.};
+
+            for (int i=0; i<3; ++i) {
+                double yMax = grPos[i].second + 6.*5;
+                double yMin = grPos[i].second - 6.*5;
+
+                for (int i: {0, 9, 1, 8, 2, 7, 3, 6, 4, 5}) {
+                    Move m;
+                    m.setAction(ActionType::CLEAR_AND_SELECT);
+                    m.setLeft(0);
+                    m.setTop(yMin+i*6.);
+                    m.setRight(ctx_.world->getWidth());
+                    m.setBottom(yMin+(i+1)*6.);
+                    m.setVehicleType(grNum[i]);
+                    queueMove(0, m);
+
+                    m.setAction(ActionType::MOVE);
+                    m.setX(0);
+                    m.setY(yLines[i] - (yMin+i*6.+3.) + yShift[i]);
+                    queueMove(0, m);
+                }
+            }
+
+            state = State::End;
+        }
+        break;
+
+        case State::End:
+            return false;
+    }
     return true;
 }

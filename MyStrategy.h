@@ -32,6 +32,7 @@ private:
     VehicleSet detectRecon(bool isAir);
 
     bool startupGroundFormation();
+    bool startupGroundFormation2();
     bool mainGround();
     bool mainHeli();
     bool mainFighter();
