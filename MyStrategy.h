@@ -30,10 +30,12 @@ private:
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
     VehicleSet detectRecon(bool isAir);
+    std::pair<bool, std::pair<double, double>> getCenter(bool isAerial) const;
 
     bool startupGroundFormation();
-    bool startupGroundFormation2();
+    bool startupAirFormation();
     bool mainGround();
+    bool mainAir();
     bool mainHeli();
     bool mainFighter();
     double clampX(double x) const;
