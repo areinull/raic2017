@@ -205,15 +205,68 @@ void MyStrategy::nuke(const std::pair<double, double> &c, std::pair<double, doub
         nukePos = pointB;
         strikeUnit = vehicleId;
     }
+
+    // try closest enemy
+    long long closestEnemy = -1;
+    double minDistSq = 1024.*1024.;
+    for (const auto &v: vehicles_) {
+        if (v.second.getPlayerId() == ctx_.me->getId())
+            continue;
+        const double d = v.second.getSquaredDistanceTo(c.first, c.second);
+        if (d < minDistSq) {
+            minDistSq = d;
+            closestEnemy = v.first;
+        }
+    }
+    if (closestEnemy < 0)
+        return;
+
+    pointB.first = vehicles_[closestEnemy].getX();
+    pointB.second = vehicles_[closestEnemy].getY();
+
+    // find closest friendly unit
+    long long closestFriend = -1;
+    minDistSq = 1024.*1024.;
+    for (const auto &v: vehicles_) {
+        if (v.second.getPlayerId() != ctx_.me->getId())
+            continue;
+        const double visionCoeff = v.second.isAerial()?
+                                   getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.getX()%32][(int)v.second.getY()%32]):
+                                   getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)v.second.getX()%32][(int)v.second.getY()%32]);
+        const double d = v.second.getSquaredDistanceTo(pointB.first, pointB.second) -
+                v.second.getSquaredVisionRange()*visionCoeff*visionCoeff;
+        if (d < minDistSq) {
+            minDistSq = d;
+            closestFriend = v.first;
+        }
+    }
+    if (closestFriend < 0)
+        return;
+
+    const double minDist = vehicles_[closestFriend].getDistanceTo(vehicles_[closestEnemy]);
+    const double visionCoeff = vehicles_[closestFriend].isAerial()?
+                               getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)vehicles_[closestFriend].getX()%32][(int)vehicles_[closestFriend].getY()%32]):
+                               getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)vehicles_[closestFriend].getX()%32][(int)vehicles_[closestFriend].getY()%32]);
+    const double curVisionRange = vehicles_[closestFriend].getVisionRange()*visionCoeff;
+    if (minDist > ctx_.game->getTacticalNuclearStrikeRadius() && minDist < curVisionRange*0.95) {
+        nukePos = pointB;
+        strikeUnit = closestFriend;
+    }
 }
 
 
 void MyStrategy::move() {
-    if (antiNuke()) {
+    const bool isGroundStartup = startupGroundFormation();
+    const bool isAirStartup = startupAirFormation();
+
+    if (!isGroundStartup && !isAirStartup && antiNuke()) {
         return;
     }
-    startupGroundFormation() || mainGround();
-    startupAirFormation() || mainAir();
+
+    if (!isGroundStartup)
+        mainGround();
+    if (!isAirStartup)
+        mainAir();
 }
 
 MyStrategy::VehicleSet MyStrategy::detectRecon(bool isAir) {
@@ -830,8 +883,24 @@ bool MyStrategy::antiNuke() {
             if (ctx_.world->getOpponentPlayer().getNextNuclearStrikeTickIndex() < 0) {
                 return false;
             }
-            state = State::Spread;
-            return antiNuke();
+            bool vehicleInRange = false;
+            const double strikeX = ctx_.world->getOpponentPlayer().getNextNuclearStrikeX();
+            const double strikeY = ctx_.world->getOpponentPlayer().getNextNuclearStrikeY();
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() != ctx_.me->getId())
+                    continue;
+                const auto d = v.second.getSquaredDistanceTo(strikeX, strikeY);
+                if ( d < ctx_.game->getTacticalNuclearStrikeRadius()*ctx_.game->getTacticalNuclearStrikeRadius()) {
+                    vehicleInRange = true;
+                    break;
+                }
+            }
+            if (vehicleInRange) {
+                state = State::Spread;
+                return antiNuke();
+            } else {
+                return false;
+            }
         }
 
         case State::Spread: {
@@ -964,10 +1033,6 @@ bool MyStrategy::startupGroundFormation() {
                 }
             }
 
-            for (int i = 0; i<3; ++i) {
-                std::cout << grNum[i] << " start pos (" << grPos[i].first << ' ' << grPos[i].second << ')' << std::endl;
-            }
-
             state = State::XArrange;
             return startupGroundFormation();
         }
@@ -977,8 +1042,6 @@ bool MyStrategy::startupGroundFormation() {
             const double xCenter[] = {xMid - 70., xMid, xMid + 70.};
 
             for (int i: {0, 1, 2})  {
-                std::cout << grPos[i].first << " -> " << xCenter[i] << std::endl;
-
                 Move m;
                 m.setAction(ActionType::CLEAR_AND_SELECT);
                 m.setLeft(0);
@@ -1017,8 +1080,6 @@ bool MyStrategy::startupGroundFormation() {
                 }
                 const double ySpan = yMax - yMin;
                 const double yStride = ySpan/9.;
-                std::cout << "Type " << grNum[i] << " y " << grPos[i].second << " span " << ySpan << std::endl;
-
                 for (int j=0; j<10; ++j) {
                     const double yCur = yMin + j*yStride;
                     const double yTarget = yLines[j] + yShift[i];
@@ -1190,10 +1251,6 @@ bool MyStrategy::startupAirFormation() {
                 }
             }
 
-            for (int i = 0; i<2; ++i) {
-                std::cout << grNum[i] << " start pos (" << grPos[i].first << ' ' << grPos[i].second << ')' << std::endl;
-            }
-
             state = State::XArrange;
             return startupAirFormation();
         }
@@ -1203,8 +1260,6 @@ bool MyStrategy::startupAirFormation() {
             const double xCenter[] = {xMid, xMid + 70.};
 
             for (int i: {0, 1})  {
-                std::cout << grPos[i].first << " -> " << xCenter[i] << std::endl;
-
                 Move m;
                 m.setAction(ActionType::CLEAR_AND_SELECT);
                 m.setLeft(0);
@@ -1243,8 +1298,6 @@ bool MyStrategy::startupAirFormation() {
                 }
                 const double ySpan = yMax - yMin;
                 const double yStride = ySpan/9.;
-                std::cout << "Type " << grNum[i] << " y " << grPos[i].second << " span " << ySpan << std::endl;
-
                 for (int j=0; j<10; ++j) {
                     const double yCur = yMin + j*yStride;
                     const double yTarget = yLines[j] + yShift[i];
