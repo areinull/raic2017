@@ -893,10 +893,10 @@ bool MyStrategy::antiNuke() {
             const double strikeX = ctx_.world->getOpponentPlayer().getNextNuclearStrikeX();
             const double strikeY = ctx_.world->getOpponentPlayer().getNextNuclearStrikeY();
             for (const auto &v: vehicles_) {
-                if (v.second.getPlayerId() != ctx_.me->getId())
+                if (v.second.getPlayerId() != ctx_.me->getId() || v.first == vId)
                     continue;
                 const auto d = v.second.getSquaredDistanceTo(strikeX, strikeY);
-                if ( d < ctx_.game->getTacticalNuclearStrikeRadius()*ctx_.game->getTacticalNuclearStrikeRadius()) {
+                if (d < ctx_.game->getTacticalNuclearStrikeRadius()*ctx_.game->getTacticalNuclearStrikeRadius()) {
                     vehicleInRange = true;
                     break;
                 }
