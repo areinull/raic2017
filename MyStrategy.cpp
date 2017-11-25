@@ -17,6 +17,7 @@ namespace {
     constexpr int LAND_GROUP = 1;
     constexpr int AIR_GROUP = 2;
     constexpr int NUKE_GROUP = 3;
+    constexpr int ANTINUKE_GROUP = 4;
     static long long vId = -1;
 }
 
@@ -260,6 +261,20 @@ void MyStrategy::nuke(const std::pair<double, double> &c, std::pair<double, doub
 
 
 void MyStrategy::move() {
+    if (ctx_.world->getTickIndex() == 0) {
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setTop(0);
+        m.setRight(ctx_.world->getWidth());
+        m.setBottom(ctx_.world->getHeight());
+        queueMove(0, m);
+
+        m.setAction(ActionType::ASSIGN);
+        m.setGroup(ANTINUKE_GROUP);
+        queueMove(0, m);
+    }
+
     nukeStriker();
 
     const bool isGroundStartup = startupGroundFormation();
@@ -917,10 +932,7 @@ bool MyStrategy::antiNuke() {
 
                     Move m;
                     m.setAction(ActionType::CLEAR_AND_SELECT);
-                    m.setLeft(0);
-                    m.setTop(0);
-                    m.setRight(ctx_.world->getWidth());
-                    m.setBottom(ctx_.world->getHeight());
+                    m.setGroup(ANTINUKE_GROUP);
                     queueMove(0, m);
 
                     m.setAction(ActionType::SCALE);
@@ -945,14 +957,7 @@ bool MyStrategy::antiNuke() {
             if (nukePos.first >= 0) {
                 Move m;
                 m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setLeft(0);
-                m.setTop(0);
-                m.setRight(ctx_.world->getWidth());
-                m.setBottom(ctx_.world->getHeight());
-                queueMove(0, m);
-                
-                m.setAction(ActionType::DESELECT);
-                m.setGroup(NUKE_GROUP);
+                m.setGroup(ANTINUKE_GROUP);
                 queueMove(0, m);
 
                 m.setAction(ActionType::SCALE);
@@ -1701,6 +1706,9 @@ bool MyStrategy::nukeStriker() {
 
             m.setAction(ActionType::DISMISS);
             m.setGroup(AIR_GROUP);
+            queueMove(0, m);
+
+            m.setGroup(ANTINUKE_GROUP);
             queueMove(0, m);
 
             m.setAction(ActionType::MOVE);
