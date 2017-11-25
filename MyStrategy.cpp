@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include "MoveField.h"
 
 using namespace model;
 using namespace std;
@@ -14,6 +16,8 @@ using namespace std;
 namespace {
     constexpr int LAND_GROUP = 1;
     constexpr int AIR_GROUP = 2;
+    constexpr int NUKE_GROUP = 3;
+    static long long vId = -1;
 }
 
 std::ostream& operator<<(std::ostream &s, VehicleType vt) {
@@ -256,6 +260,8 @@ void MyStrategy::nuke(const std::pair<double, double> &c, std::pair<double, doub
 
 
 void MyStrategy::move() {
+    nukeStriker();
+
     const bool isGroundStartup = startupGroundFormation();
     const bool isAirStartup = startupAirFormation();
 
@@ -1214,7 +1220,7 @@ bool MyStrategy::startupAirFormation() {
         return false;
 
     for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() && vehicleMoved_[v.first]) {
+        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() && v.first != vId && vehicleMoved_[v.first]) {
             // юниты ещё перемещаются
             return true;
         }
@@ -1269,6 +1275,12 @@ bool MyStrategy::startupAirFormation() {
                 m.setVehicleType(grNum[i]);
                 queueMove(0, m);
 
+                if (grNum[i] == VehicleType::FIGHTER) {
+                    m.setAction(ActionType::DESELECT);
+                    m.setGroup(NUKE_GROUP);
+                    queueMove(0, m);
+                }
+
                 m.setAction(ActionType::MOVE);
                 m.setX(xCenter[i] - grPos[i].first);
                 m.setY(0);
@@ -1291,7 +1303,7 @@ bool MyStrategy::startupAirFormation() {
                 double yMax = 0.;
                 double yMin = 1024.;
                 for (const auto &v: vehicles_) {
-                    if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == grNum[i]) {
+                    if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == grNum[i] && v.first != vId) {
                         yMax = std::max(yMax, v.second.getY());
                         yMin = std::min(yMin, v.second.getY());
                     }
@@ -1355,6 +1367,10 @@ bool MyStrategy::startupAirFormation() {
             m.setVehicleType(VehicleType::FIGHTER);
             queueMove(0, m);
 
+            m.setAction(ActionType::DESELECT);
+            m.setGroup(NUKE_GROUP);
+            queueMove(0, m);
+
             m.setAction(ActionType::MOVE);
             m.setX(grPos[type2idx[VehicleType::HELICOPTER]].first - grPos[type2idx[VehicleType::FIGHTER]].first);
             m.setY(0);
@@ -1367,6 +1383,9 @@ bool MyStrategy::startupAirFormation() {
         case State::Scale: {
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setGroup(AIR_GROUP);
+            queueMove(0, m);
+            /*
             m.setLeft(0);
             m.setTop(0);
             m.setRight(ctx_.world->getWidth());
@@ -1378,15 +1397,19 @@ bool MyStrategy::startupAirFormation() {
             m.setVehicleType(VehicleType::HELICOPTER);
             queueMove(0, m);
 
+            m.setAction(ActionType::DESELECT);
+            m.setGroup(NUKE_GROUP);
+            queueMove(0, m);
+
             m.setAction(ActionType::ASSIGN);
             m.setGroup(AIR_GROUP);
             queueMove(0, m);
-
+*/
             double x = 0., y = 0.;
             for (const auto &v: vehicles_) {
-                if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial()) {
-                    x += v.second.getX()/200.;
-                    y += v.second.getY()/200.;
+                if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() && v.first != vId) {
+                    x += v.second.getX()/199.;
+                    y += v.second.getY()/199.;
                 }
             }
 
@@ -1437,7 +1460,7 @@ bool MyStrategy::mainAir() {
 
     if (state != State::NukeStrike) {
         for (const auto &v: vehicles_) {
-            if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() && vehicleMoved_[v.first]) {
+            if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() && v.first != vId && vehicleMoved_[v.first]) {
                 // юниты ещё перемещаются
                 return true;
             }
@@ -1593,12 +1616,11 @@ bool MyStrategy::mainAir() {
     return true;
 }
 
-std::pair<bool, std::pair<double, double>> MyStrategy::getCenter(bool isAerial) const
-{
+std::pair<bool, std::pair<double, double>> MyStrategy::getCenter(bool isAerial) const {
     int cnt = 0;
     std::pair<double, double> res{0., 0.};
     for (const auto &v: vehicles_) {
-        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() == isAerial) {
+        if (v.second.getPlayerId() == ctx_.me->getId() && v.second.isAerial() == isAerial && v.first != vId) {
             res.first += v.second.getX();
             res.second += v.second.getY();
             ++cnt;
@@ -1610,4 +1632,214 @@ std::pair<bool, std::pair<double, double>> MyStrategy::getCenter(bool isAerial) 
     res.first /= cnt;
     res.second /= cnt;
     return {true, res};
+}
+
+bool MyStrategy::nukeStriker() {
+    enum class State {
+        Init,
+        Idle,
+        Move,
+        Nuke,
+        End
+    };
+
+    static auto state = State::Init;
+
+    if (state == State::End) {
+        return false;
+    }
+
+    if (state != State::Init) {
+        if (!vehicles_.count(vId)) {
+            bool gotFighter = false;
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() == ctx_.me->getId() && v.second.getType() == VehicleType::FIGHTER) {
+                    gotFighter = true;
+                    break;
+                }
+            }
+            if (gotFighter) {
+                state = State::Init;
+            } else {
+                state = State::End;
+            }
+        } else if (vehicleMoved_[vId]) {
+            return true;
+        }
+    }
+
+    switch (state) {
+        case State::Init: {
+            double x_max = 0., y_max = 0.;
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() != ctx_.me->getId() || v.second.getType() != VehicleType::FIGHTER)
+                    continue;
+                if (v.second.getX() >= x_max && v.second.getY() >= y_max) {
+                    x_max = v.second.getX();
+                    y_max = v.second.getY();
+                    vId = v.first;
+                }
+            }
+//            std::cout << "vId " << vId << ' ' << x_max << ' ' << y_max << std::endl;
+
+            Move m;
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setLeft(x_max - 2);
+            m.setTop(y_max - 2);
+            m.setRight(x_max + 2);
+            m.setBottom(y_max + 2);
+            m.setVehicleType(VehicleType::FIGHTER);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ASSIGN);
+            m.setGroup(NUKE_GROUP);
+            queueMove(0, m);
+
+            m.setAction(ActionType::DISMISS);
+            m.setGroup(AIR_GROUP);
+            queueMove(0, m);
+
+            m.setAction(ActionType::MOVE);
+            m.setX(32);
+            m.setY(32);
+            queueMove(0, m);
+
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setLeft(0);
+            m.setTop(0);
+            m.setRight(ctx_.world->getWidth());
+            m.setBottom(ctx_.world->getHeight());
+            m.setVehicleType(VehicleType::FIGHTER);
+            m.setGroup(0);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ADD_TO_SELECTION);
+            m.setVehicleType(VehicleType::HELICOPTER);
+            queueMove(0, m);
+
+            m.setAction(ActionType::DESELECT);
+            m.setGroup(NUKE_GROUP);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ASSIGN);
+            m.setGroup(AIR_GROUP);
+            queueMove(0, m);
+
+            state = State::Idle;
+        }
+        break;
+
+        case State::Idle: {
+            MoveField f;
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() != ctx_.me->getId()) {
+                    f.addUnit(v.second.getX(), v.second.getY());
+                } else if (v.second.isAerial() && v.first != vId) {
+                    f.addObstacle(v.second.getX(), v.second.getY());
+                }
+            }
+
+            const double x = vehicles_[vId].getX();
+            const double y = vehicles_[vId].getY();
+            const auto path = f.pathToNeg(x, y);
+
+            if (path.empty()) {
+//                std::cout << "empty" << std::endl;
+                state = State::Nuke;
+                return nukeStriker();
+            }
+            const auto dest = path[std::min(8, (int)path.size()-1)];
+
+            bool onlyStrikeSelected = vehicles_[vId].isSelected();
+            if (onlyStrikeSelected) {
+                for (const auto &v: vehicles_) {
+                    if (v.second.getPlayerId() == ctx_.me->getId() &&
+                        v.first != vId && v.second.isSelected()) {
+                        onlyStrikeSelected = false;
+                        break;
+                    }
+                }
+            }
+
+            Move m;
+
+            if (!onlyStrikeSelected) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setGroup(NUKE_GROUP);
+                queueMove(0, m);
+            }
+
+            m.setAction(ActionType::MOVE);
+            m.setX(dest.first - x);
+            m.setY(dest.second - y);
+            queueMove(0, m);
+
+            state = State::Move;
+
+//            std::cout << "move " << dest.first << ' ' << dest.second << std::endl;
+        }
+        break;
+
+        case State::Move: {
+            state = State::Idle;
+            return nukeStriker();
+        }
+
+        case State::Nuke: {
+            if (ctx_.me->getNextNuclearStrikeTickIndex() > 0) {
+                if (ctx_.me->getNextNuclearStrikeVehicleId() == vId) {
+                    break;
+                } else {
+                    state = State::Idle;
+                    return false;
+                }
+            }
+            if (ctx_.me->getRemainingNuclearStrikeCooldownTicks() > 0) {
+                state = State::Idle;
+                return false;
+            }
+
+            const double x = vehicles_[vId].getX();
+            const double y = vehicles_[vId].getY();
+            const double visionCoeff = getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)x%32][(int)y%32]);
+            const double visionSq = (vehicles_[vId].getVisionRange()*visionCoeff)*(vehicles_[vId].getVisionRange()*visionCoeff);
+            double tx = 0.;
+            double ty = 0.;
+            int cnt = 0;
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() == ctx_.me->getId() || v.second.getSquaredDistanceTo(x, y) > visionSq)
+                    continue;
+                tx += v.second.getX();
+                ty += v.second.getY();
+                ++cnt;
+            }
+            if (!cnt) {
+                return false;
+            }
+            tx /= cnt;
+            ty /= cnt;
+
+            const double nSq = ctx_.game->getTacticalNuclearStrikeRadius()*ctx_.game->getTacticalNuclearStrikeRadius();
+            for (const auto &v: vehicles_) {
+                if (v.second.getPlayerId() != ctx_.me->getId())
+                    continue;
+                if (v.second.getSquaredDistanceTo(tx, ty) < nSq) {
+                    return false;
+                }
+            }
+
+            Move m;
+            m.setAction(ActionType::TACTICAL_NUCLEAR_STRIKE);
+            m.setX(tx);
+            m.setY(ty);
+            m.setVehicleId(vId);
+            queueMove(0, m);
+        }
+        break;
+
+        case State::End:
+            return false;
+    }
+
+    return true;
 }

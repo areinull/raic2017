@@ -3,4 +3,4 @@
 PACKAGE=strat.zip
 
 rm -f $PACKAGE
-zip $PACKAGE MyStrategy* Context*
+zip $PACKAGE MyStrategy* Context* MoveField*

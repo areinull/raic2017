@@ -41,6 +41,7 @@ private:
     double clampX(double x) const;
     double clampY(double y) const;
     bool antiNuke();
+    bool nukeStriker();
 
     VehicleById vehicles_;
     UpdateTickByVehicleId vehiclesUpdateTick_;
