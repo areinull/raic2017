@@ -950,6 +950,10 @@ bool MyStrategy::antiNuke() {
                 m.setRight(ctx_.world->getWidth());
                 m.setBottom(ctx_.world->getHeight());
                 queueMove(0, m);
+                
+                m.setAction(ActionType::DESELECT);
+                m.setGroup(NUKE_GROUP);
+                queueMove(0, m);
 
                 m.setAction(ActionType::SCALE);
                 m.setX(nukePos.first);
