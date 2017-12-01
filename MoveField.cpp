@@ -19,9 +19,9 @@ int MoveField::clamp(int v) {
     return std::max(0, std::min(gridMax_-1, v));
 }
 
-void MoveField::addUnit(double x, double y) {
-    const int xi = x/gridStride_;
-    const int yi = y/gridStride_;
+void MoveField::addUnit(const V2d &p) {
+    const int xi = p.x/gridStride_;
+    const int yi = p.y/gridStride_;
     for (int x = clamp(xi-nukeRange_), x_end = clamp(xi+nukeRange_)+1; x < x_end; ++x) {
         for (int y = clamp(yi-nukeRange_), y_end = clamp(yi+nukeRange_)+1; y < y_end; ++y) {
             if (std::abs(xi-x) <= fireRange_ && std::abs(yi-y) <= fireRange_) {
@@ -33,9 +33,9 @@ void MoveField::addUnit(double x, double y) {
     }
 }
 
-void MoveField::addObstacle(double x, double y) {
-    const int xi = x/gridStride_;
-    const int yi = y/gridStride_;
+void MoveField::addObstacle(const V2d &p) {
+    const int xi = p.x/gridStride_;
+    const int yi = p.y/gridStride_;
     for (int x = clamp(xi-1), x_end = clamp(xi+1)+1; x < x_end; ++x) {
         for (int y = clamp(yi-1), y_end = clamp(yi+1)+1; y < y_end; ++y) {
             field_[x][y] = 100;
@@ -61,11 +61,11 @@ std::pair<int, int> MoveField::expand(int c) {
     return { c % gridMax_, c / gridMax_ };
 }
 
-std::vector<std::pair<double, double>> MoveField::pathToNeg(double x, double y) const {
-    const auto p = pathToNeg(collapse(x/gridStride_, y/gridStride_));
-    std::vector<std::pair<double, double>> res;
+std::vector<V2d> MoveField::pathToNeg(const V2d &s) const {
+    const auto p = pathToNeg(collapse(s.x/gridStride_, s.y/gridStride_));
+    std::vector<V2d> res;
     res.reserve(p.size());
-    std::transform(p.rbegin(), p.rend(), std::back_inserter(res), [](const int i) -> std::pair<double, double> {
+    std::transform(p.rbegin(), p.rend(), std::back_inserter(res), [](const int i) -> V2d {
         const auto e = expand(i);
         return {e.first*gridStride_+gridStride_*0.5, e.second*gridStride_+gridStride_*0.5};
     });

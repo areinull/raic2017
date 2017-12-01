@@ -9,11 +9,7 @@
 #include "Context.h"
 
 class MyStrategy : public Strategy {
-    using UpdateTickByVehicleId = std::unordered_map<long long, int>;
-    using VehiclePrevPos = std::unordered_map<long long, std::pair<double, double>>;
-    using VehicleMoved = std::unordered_map<long long, bool>;
-    using MoveQueue = std::multimap<int,model::Move>;
-    using VehicleSet = std::unordered_set<long long>;
+    using MoveQueue = std::multimap<int, model::Move>;
 
 public:
     MyStrategy();
@@ -25,31 +21,25 @@ private:
     void queueMove(int delay, const model::Move &m);
     bool executeDelayedMove(model::Move& move);
     void move();
-    std::pair<double, double> target() const;
-    void nuke(const std::pair<double, double> &grPos, std::pair<double, double> &nukePos, long long &strikeUnit);
+    V2d target() const;
+    void nuke(const V2d &grPos, V2d &nukePos, VId &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
-    VehicleSet detectRecon(bool isAir);
-    std::pair<bool, std::pair<double, double>> getCenter(bool isAerial) const;
+    std::pair<bool, V2d> getCenter(bool isAerial) const;
 
     bool startupGroundFormation();
     bool startupAirFormation();
     bool mainGround();
     bool mainAir();
-    bool mainHeli();
-    bool mainFighter();
     double clampX(double x) const;
     double clampY(double y) const;
     bool antiNuke();
     bool nukeStriker();
 
     VehicleById vehicles_;
-    UpdateTickByVehicleId vehiclesUpdateTick_;
     MoveQueue moveQueue_;
     Context ctx_;
     double slowestGroundSpeed_;
-    VehiclePrevPos vehiclePrevPos_;
-    VehicleMoved vehicleMoved_;
 };
 
 #endif

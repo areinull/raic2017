@@ -4,6 +4,7 @@
 #define MYSTRATEGY_MOVEFIELD_H
 
 #include <vector>
+#include "V2d.h"
 
 struct Context;
 
@@ -12,9 +13,9 @@ public:
     MoveField();
 
     void clearField();
-    void addUnit(double x, double y);
-    void addObstacle(double x, double y);
-    std::vector<std::pair<double, double>> pathToNeg(double x, double y) const;
+    void addUnit(const V2d &p);
+    void addObstacle(const V2d &p);
+    std::vector<V2d> pathToNeg(const V2d &s) const;
 
 private:
     static int clamp(int v);
