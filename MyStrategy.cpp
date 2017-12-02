@@ -147,6 +147,47 @@ V2d MyStrategy::target() const {
     if (cnt) {
         t /= cnt;
     }
+
+    // проверям, что в центре что-то есть
+    constexpr double offset = 32.;
+    const double xmin = clampX(t.x - offset),
+                 xmax = clampX(t.x + offset),
+                 ymin = clampY(t.y - offset),
+                 ymax = clampY(t.y + offset);
+    bool gotEnemyInside = false;
+    for (const auto &vext: vehicles_) {
+        if (!vext.second.isMine &&
+            vext.second.pos.x > xmin &&
+            vext.second.pos.x < xmax &&
+            vext.second.pos.y > ymin &&
+            vext.second.pos.y < ymax) {
+            gotEnemyInside = true;
+            break;
+        }
+    }
+    if (gotEnemyInside) {
+        return t;
+    }
+
+    // в центре никого нет, ищем ближайший юнит
+    auto c = getCenter(false);
+    if (!c.first) {
+        c = getCenter(true);
+    }
+    double minDistSq = std::numeric_limits<double>::max();
+    VId closest = -1;
+    for (const auto &vext: vehicles_) {
+        if (vext.second.isMine)
+            continue;
+        const double distSq = vext.second.v.getSquaredDistanceTo(c.second.x, c.second.y);
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closest = vext.first;
+        }
+    }
+    if (closest >= 0) {
+        t = vehicles_.at(closest).pos;
+    }
     return t;
 }
 
@@ -210,7 +251,7 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
 
     // try closest enemy
     VId closestEnemy = -1;
-    double minDistSq = 1024.*1024.;
+    double minDistSq = 1024.*1024.*4.;
     for (const auto &v: vehicles_) {
         if (v.second.isMine)
             continue;
