@@ -5,11 +5,12 @@
 
 #include <map>
 #include <unordered_set>
+#include <functional>
 #include "Strategy.h"
 #include "Context.h"
 
 class MyStrategy : public Strategy {
-    using MoveQueue = std::multimap<int, model::Move>;
+    using MoveQueue = std::multimap<int, std::pair<model::Move, std::function<void(void)>>>;
 
 public:
     MyStrategy();
@@ -18,7 +19,7 @@ public:
 private:
     void initializeStrategy(const model::Game &game);
     void initializeTick(const model::Player &me, const model::World &world, const model::Game &game, const model::Move &move);
-    void queueMove(int delay, const model::Move &m);
+    void queueMove(int delay, const model::Move &m, std::function<void(void)> &&f = std::function<void(void)>());
     bool executeDelayedMove(model::Move& move);
     void move();
     V2d target() const;
@@ -35,11 +36,13 @@ private:
     double clampY(double y) const;
     bool antiNuke();
     bool nukeStriker();
+    bool onlyGroupSelected(int g) const;
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;
     Context ctx_;
     double slowestGroundSpeed_;
+    double slowestAirSpeed_;
 };
 
 #endif

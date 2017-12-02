@@ -78,6 +78,7 @@ void MyStrategy::initializeStrategy(const model::Game &game) {
         firstTime = false;
         srand(game.getRandomSeed());
         slowestGroundSpeed_ = game.getTankSpeed() * game.getSwampTerrainSpeedFactor();
+        slowestAirSpeed_ = game.getHelicopterSpeed() * game.getRainWeatherSpeedFactor();
         ctx_.vehicleById = &vehicles_;
     }
 }
@@ -117,8 +118,18 @@ bool MyStrategy::executeDelayedMove(Move& move) {
         return false;
 
     if (moveQueue_.begin()->first <= ctx_.world->getTickIndex()) {
-        move = moveQueue_.begin()->second;
+        const auto &elt = moveQueue_.begin()->second;
+        move = elt.first;
+        if (elt.second) {
+            elt.second();
+        }
         moveQueue_.erase(moveQueue_.begin());
+
+        if (move.getAction() == ActionType::CLEAR_AND_SELECT && move.getGroup()) {
+            if (onlyGroupSelected(move.getGroup())) {
+                executeDelayedMove(move);
+            }
+        }
     }
 
     return true;
@@ -218,7 +229,7 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
     VId closestFriend = -1;
     minDistSq = 1024.*1024.;
     for (const auto &v: vehicles_) {
-        if (!v.second.isMine)
+        if (!v.second.isMine || v.first == vId)
             continue;
         const double visionCoeff = v.second.v.isAerial()?
                                    getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.pos.x%32][(int)v.second.pos.y%32]):
@@ -275,8 +286,8 @@ void MyStrategy::move() {
         mainAir();
 }
 
-void MyStrategy::queueMove(int delay, const Move &m){
-    moveQueue_.emplace(ctx_.world->getTickIndex() + delay, m);
+void MyStrategy::queueMove(int delay, const Move &m, std::function<void(void)> &&f) {
+    moveQueue_.emplace(ctx_.world->getTickIndex() + delay, std::make_pair(m, f));
 }
 
 bool MyStrategy::mainGround() {
@@ -297,6 +308,7 @@ bool MyStrategy::mainGround() {
                d{0., 0.};
     constexpr double dd_max = 64.;
     static double ang = 0.;
+    static bool waitingMoveQueue = false;
 
     if (state == State::End)
         return false;
@@ -415,7 +427,8 @@ bool MyStrategy::mainGround() {
             m.setX(nukePos.x);
             m.setY(nukePos.y);
             m.setVehicleId(strikeUnit);
-            queueMove(0, m);
+            queueMove(0, m, [&waitingMoveQueue](){ waitingMoveQueue = false; });
+            waitingMoveQueue = true;
 
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setGroup(LAND_GROUP);
@@ -431,7 +444,7 @@ bool MyStrategy::mainGround() {
         break;
 
         case State::NukeStrikeWait: {
-            if (ctx_.me->getNextNuclearStrikeTickIndex() < 0) {
+            if (!waitingMoveQueue && ctx_.me->getNextNuclearStrikeTickIndex() < 0) {
                 state = State::Idle;
                 return mainGround();
             }
@@ -996,6 +1009,7 @@ bool MyStrategy::mainAir() {
                d{0., 0.};
     constexpr double dd_max = 10.;
     static double ang = 0.;
+    static bool waitingMoveQueue = false;
 
     if (state == State::End)
         return false;
@@ -1057,11 +1071,37 @@ bool MyStrategy::mainAir() {
                 }
             }
 
+            /*
+            if (haveGroundUnits) {
+                d = t - groundPos;
+                dd = d.getNorm();
+                ang = std::asin((rot.x * d.y - rot.y * d.x) / dd);
+                if (std::abs(ang) > M_PI / 12.) {
+                    rot = d/dd;
+                    state = State::PreRotate;
+                } else {
+                    d = groundPos - pos + d*12./dd;
+                    state = State::Move;
+                }
+            } else {
+                d = t - pos;
+                dd = d.getNorm();
+                ang = std::asin((rot.x * d.y - rot.y * d.x) / dd);
+                if (std::abs(ang) > M_PI / 12.) {
+                    rot = d/dd;
+                    state = State::PreRotate;
+                } else {
+                    state = State::Move;
+                }
+            }
+             */
+
             return mainAir();
         }
 
         case State::PreRotate: {
             Move m;
+
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setGroup(AIR_GROUP);
             queueMove(0, m);
@@ -1086,6 +1126,7 @@ bool MyStrategy::mainAir() {
             m.setX(pos.x);
             m.setY(pos.y);
             m.setAngle(ang);
+            m.setMaxSpeed(slowestAirSpeed_);
             queueMove(0, m);
 
             state = State::PostRotate;
@@ -1117,6 +1158,7 @@ bool MyStrategy::mainAir() {
             m.setAction(ActionType::MOVE);
             m.setX(d.x);
             m.setY(d.y);
+            m.setMaxSpeed(slowestAirSpeed_);
             queueMove(0, m);
 
             state = State::Idle;
@@ -1129,7 +1171,8 @@ bool MyStrategy::mainAir() {
             m.setX(nukePos.x);
             m.setY(nukePos.y);
             m.setVehicleId(strikeUnit);
-            queueMove(0, m);
+            queueMove(0, m, [&waitingMoveQueue](){ waitingMoveQueue = false; });
+            waitingMoveQueue = true;
 
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setGroup(AIR_GROUP);
@@ -1145,7 +1188,7 @@ bool MyStrategy::mainAir() {
             break;
 
         case State::NukeStrikeWait: {
-            if (ctx_.me->getNextNuclearStrikeTickIndex() < 0) {
+            if (!waitingMoveQueue && ctx_.me->getNextNuclearStrikeTickIndex() < 0) {
                 state = State::Idle;
                 return mainAir();
             }
@@ -1290,23 +1333,10 @@ bool MyStrategy::nukeStriker() {
             }
             const auto dest = path[std::min(8, (int)path.size()-1)];
 
-            bool onlyStrikeSelected = vehicles_[vId].v.isSelected();
-            if (onlyStrikeSelected) {
-                for (const auto &v: vehicles_) {
-                    if (v.second.isMine && v.first != vId && v.second.v.isSelected()) {
-                        onlyStrikeSelected = false;
-                        break;
-                    }
-                }
-            }
-
             Move m;
-
-            if (!onlyStrikeSelected) {
-                m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setGroup(NUKE_GROUP);
-                queueMove(0, m);
-            }
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setGroup(NUKE_GROUP);
+            queueMove(0, m);
 
             m.setAction(ActionType::MOVE);
             m.setX(dest.x - vehicles_[vId].pos.x);
@@ -1325,6 +1355,9 @@ bool MyStrategy::nukeStriker() {
         }
 
         case State::Nuke: {
+            static bool waitingMoveQueue = false;
+            if (waitingMoveQueue)
+                break;
             if (ctx_.me->getNextNuclearStrikeTickIndex() > 0) {
                 if (ctx_.me->getNextNuclearStrikeVehicleId() == vId) {
                     break;
@@ -1367,7 +1400,8 @@ bool MyStrategy::nukeStriker() {
             m.setX(t.x);
             m.setY(t.y);
             m.setVehicleId(vId);
-            queueMove(0, m);
+            queueMove(0, m, [&waitingMoveQueue](){ waitingMoveQueue = false; });
+            waitingMoveQueue = true;
         }
         break;
 
@@ -1375,5 +1409,21 @@ bool MyStrategy::nukeStriker() {
             return false;
     }
 
+    return true;
+}
+
+bool MyStrategy::onlyGroupSelected(int g) const {
+    for (const auto &vext: vehicles_) {
+        if (!vext.second.isMine)
+            continue;
+        const auto &groups = vext.second.v.getGroups();
+        if (std::find(groups.begin(), groups.end(), g) == groups.end()) {
+            if (vext.second.v.isSelected()) {
+                return false;
+            }
+        } else if (!vext.second.v.isSelected()) {
+            return false;
+        }
+    }
     return true;
 }

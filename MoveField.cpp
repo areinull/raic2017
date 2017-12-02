@@ -1,7 +1,7 @@
 #include <cstring>
 #include <iomanip>
 #include <algorithm>
-#include <queue>
+#include <map>
 #include <unordered_set>
 #include <iostream>
 #include "Context.h"
@@ -74,22 +74,25 @@ std::vector<V2d> MoveField::pathToNeg(const V2d &s) const {
 
 std::vector<int> MoveField::pathToNeg(int s) const {
     const auto s_exp = expand(s);
-    std::queue<int> q;
+    std::multimap<int, std::pair<int, int>> fringe;
     std::unordered_set<int> vis;
     std::array<int, gridMax_*gridMax_> parent;
     parent.fill(-1);
 
     int dest = -1;
-    q.push(s);
-    parent[s] = s;
-    while (!q.empty()) {
-        const auto cur = q.front();
+    fringe.emplace(0, std::make_pair(s, s));
+    while (!fringe.empty()) {
+        int cur_cost, cur, prev;
+        std::pair<int, int> cur_edge;
+        std::tie(cur_cost, cur_edge) = *fringe.begin();
+        std::tie(prev, cur) = cur_edge;
         const auto cur_exp = expand(cur);
-        q.pop();
+        fringe.erase(fringe.begin());
         if (vis.count(cur)) {
             continue;
         }
         vis.insert(cur);
+        parent[cur] = prev;
 
         if ((field_[s_exp.first][s_exp.second] > 0 && field_[cur_exp.first][cur_exp.second] <= 0) ||
             field_[cur_exp.first][cur_exp.second] < 0) {
@@ -101,7 +104,11 @@ std::vector<int> MoveField::pathToNeg(int s) const {
                 std::pair<int, int>{-1, 0},
                 std::pair<int, int>{1, 0},
                 std::pair<int, int>{0, -1},
-                std::pair<int, int>{0, 1}
+                std::pair<int, int>{0, 1},
+                std::pair<int, int>{-1, -1},
+                std::pair<int, int>{1, 1},
+                std::pair<int, int>{1, -1},
+                std::pair<int, int>{-1, 1}
         }) {
             const std::pair<int, int> n_exp{cur_exp.first+dif_exp.first, cur_exp.second+dif_exp.second};
             if (n_exp.first < 0 ||
@@ -115,8 +122,8 @@ std::vector<int> MoveField::pathToNeg(int s) const {
             if (vis.count(n)) {
                 continue;
             }
-            q.push(n);
-            parent[n] = cur;
+            const int trans_cost = std::abs(dif_exp.first) + std::abs(dif_exp.second);
+            fringe.emplace(cur_cost + trans_cost, std::make_pair(cur, n));
         }
     }
 
