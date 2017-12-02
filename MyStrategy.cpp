@@ -347,7 +347,7 @@ bool MyStrategy::mainGround() {
                 d *= k;
                 dd = dd_max;
             }
-            if (std::abs(ang) > M_PI / 12.) {
+            if (std::abs(ang) > PI / 12.) {
                 rot = d/dd;
                 state = State::PreRotate;
             } else {
@@ -1063,7 +1063,7 @@ bool MyStrategy::mainAir() {
                     d *= k;
                     dd = dd_max;
                 }
-                if (std::abs(ang) > M_PI / 12.) {
+                if (std::abs(ang) > PI / 12.) {
                     rot = d/dd;
                     state = State::PreRotate;
                 } else {
