@@ -135,8 +135,43 @@ bool MyStrategy::executeDelayedMove(Move& move) {
     return true;
 }
 
-V2d MyStrategy::target() const {
+V2d MyStrategy::target(const V2d &c, bool acceptFacility, bool isMainForce) const {
     V2d t{0., 0.};
+
+    // ближайшее нейтральное или чужое здание
+    while (acceptFacility) {
+        int closestFacIdx = -1;
+        double minDistSq = 1024.*1024.*4.;
+        auto facilities = ctx_.world->getFacilities();
+        for (int i = 0, i_end = facilities.size(); i < i_end; ++i) {
+            if (facilities[i].getOwnerPlayerId() == ctx_.me->getId()) {
+                if (isMainForce && facilities[i].getType() == FacilityType::VEHICLE_FACTORY) {
+                    // захватываем основными силами только один завод
+                    closestFacIdx = -1;
+                    break;
+                }
+                continue;
+            }
+            if (isMainForce && facilities[i].getType() != FacilityType::VEHICLE_FACTORY) {
+                continue;
+            }
+
+            const V2d facCenter{facilities[i].getLeft() + ctx_.game->getFacilityWidth()/2.,
+                                facilities[i].getTop() + ctx_.game->getFacilityHeight()/2.};
+            const double distSq = (c - facCenter).getNormSq();
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                closestFacIdx = i;
+            }
+        }
+        if (closestFacIdx < 0)
+            break;
+        t.x = facilities[closestFacIdx].getLeft() + ctx_.game->getFacilityWidth()/2.;
+        t.y = facilities[closestFacIdx].getTop() + ctx_.game->getFacilityHeight()/2.;
+        return t;
+    }
+
+    // центр масс противника
     int cnt = 0;
     for (const auto &v: vehicles_) {
         if (!v.second.isMine) {
@@ -170,16 +205,12 @@ V2d MyStrategy::target() const {
     }
 
     // в центре никого нет, ищем ближайший юнит
-    auto c = getCenter(false);
-    if (!c.first) {
-        c = getCenter(true);
-    }
     double minDistSq = std::numeric_limits<double>::max();
     VId closest = -1;
     for (const auto &vext: vehicles_) {
         if (vext.second.isMine)
             continue;
-        const double distSq = vext.second.v.getSquaredDistanceTo(c.second.x, c.second.y);
+        const double distSq = vext.second.v.getSquaredDistanceTo(c.x, c.y);
         if (distSq < minDistSq) {
             minDistSq = distSq;
             closest = vext.first;
@@ -196,7 +227,7 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
         return;
     }
 
-    const auto t = target();
+    const auto t = target(c, false);
 
     const V2d eDir = (t - c).unit();
 
@@ -325,6 +356,8 @@ void MyStrategy::move() {
         mainGround();
     if (!isAirStartup)
         mainAir();
+
+    manageFacilities();
 }
 
 void MyStrategy::queueMove(int delay, const Move &m, std::function<void(void)> &&f) {
@@ -363,7 +396,9 @@ bool MyStrategy::mainGround() {
 
     if (state != State::NukeStrike) {
         for (const auto &v: vehicles_) {
-            if (v.second.isMine && !v.second.v.isAerial() && v.second.hasMoved()) {
+            if (v.second.isMine &&
+                std::find(v.second.v.getGroups().begin(), v.second.v.getGroups().end(), LAND_GROUP) != v.second.v.getGroups().end() &&
+                v.second.hasMoved()) {
                 // юниты ещё перемещаются
                 return true;
             }
@@ -379,7 +414,7 @@ bool MyStrategy::mainGround() {
 
     switch (state) {
         case State::Idle: {
-            t = target();
+            t = target(pos, true, true);
             d = t - pos;
             double dd = d.getNorm();
             ang = std::asin((rot.x * d.y - rot.y * d.x) / dd);
@@ -1064,7 +1099,9 @@ bool MyStrategy::mainAir() {
 
     if (state != State::NukeStrike) {
         for (const auto &v: vehicles_) {
-            if (v.second.isMine && v.second.v.isAerial() && v.first != vId && v.second.hasMoved()) {
+            if (v.second.isMine &&
+                std::find(v.second.v.getGroups().begin(), v.second.v.getGroups().end(), AIR_GROUP) != v.second.v.getGroups().end() &&
+                v.second.hasMoved()) {
                 // юниты ещё перемещаются
                 return true;
             }
@@ -1083,7 +1120,7 @@ bool MyStrategy::mainAir() {
             bool haveGroundUnits;
             V2d groundPos;
             std::tie(haveGroundUnits, groundPos) = getCenter(false);
-            t = target();
+            t = target(haveGroundUnits? groundPos: pos, false);
             double dd;
             if (haveGroundUnits && (groundPos - pos).getNormSq() > 16*16) {
                 d = t - groundPos;
@@ -1246,7 +1283,8 @@ std::pair<bool, V2d> MyStrategy::getCenter(bool isAerial) const {
     int cnt = 0;
     V2d res{0., 0.};
     for (const auto &v: vehicles_) {
-        if (v.second.isMine && v.second.v.isAerial() == isAerial && v.first != vId) {
+        if (v.second.isMine &&
+            std::find(v.second.v.getGroups().begin(), v.second.v.getGroups().end(), isAerial? AIR_GROUP: LAND_GROUP) != v.second.v.getGroups().end()) {
             res += v.second.pos;
             ++cnt;
         }
@@ -1467,4 +1505,174 @@ bool MyStrategy::onlyGroupSelected(int g) const {
         }
     }
     return true;
+}
+
+void MyStrategy::manageFacilities() {
+    enum class State {
+        CC,
+        Idle,
+        Producing,
+        NotMine
+    };
+
+    static std::map<long long, State> facilities;
+
+    for (const auto &f: ctx_.world->getFacilities()) {
+        if (!facilities.count(f.getId())) {
+            if (f.getOwnerPlayerId() != ctx_.me->getId()) {
+                facilities[f.getId()] = State::NotMine;
+            } else if (f.getType() == FacilityType::CONTROL_CENTER) {
+                facilities[f.getId()] = State::CC;
+            } else if (f.getVehicleType() == VehicleType::_UNKNOWN_) {
+                facilities[f.getId()] = State::Idle;
+            } else {
+                facilities[f.getId()] = State::Producing;
+            }
+        }
+
+        if (f.getOwnerPlayerId() != ctx_.me->getId()) {
+            facilities[f.getId()] = State::NotMine;
+        } else if (f.getType() == FacilityType::CONTROL_CENTER) {
+            facilities[f.getId()] = State::CC;
+        } else if (facilities[f.getId()] == State::NotMine) {
+            facilities[f.getId()] = State::Idle;
+        }
+
+        switch (facilities[f.getId()]) {
+            case State::Idle: {
+                constexpr double offset = 16.;
+                bool gotLandGroup = false;
+                for (const auto &vext: vehicles_) {
+                    if (!vext.second.isMine ||
+                        vext.second.pos.x < f.getLeft() - offset ||
+                        vext.second.pos.x > f.getLeft() + ctx_.game->getFacilityWidth() + offset ||
+                        vext.second.pos.y < f.getTop() - offset ||
+                        vext.second.pos.y > f.getTop() + ctx_.game->getFacilityHeight() + offset) {
+                        continue;
+                    }
+
+                    if (std::find(vext.second.v.getGroups().begin(),
+                                  vext.second.v.getGroups().end(),
+                                  LAND_GROUP) != vext.second.v.getGroups().end()) {
+                        gotLandGroup = true;
+                        break;
+                    }
+                }
+                if (gotLandGroup)
+                    break;
+
+                Move m;
+                m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
+                m.setFacilityId(f.getId());
+                m.setVehicleType(VehicleType::IFV);
+                queueMove(0, m);
+
+                facilities[f.getId()] = State::Producing;
+            }
+            break;
+
+            case State::CC:
+            case State::Producing: {
+                constexpr double offset = 16.;
+                bool gotFromLandGroup = false;
+                bool gotFromAirGroup = false;
+                bool gotFromNukeGroup = false;
+                int cnt = 0;
+
+                for (const auto &vext: vehicles_) {
+                    if (!vext.second.isMine ||
+                        vext.second.pos.x < f.getLeft() - offset ||
+                        vext.second.pos.x > f.getLeft() + ctx_.game->getFacilityWidth() + offset ||
+                        vext.second.pos.y < f.getTop() - offset ||
+                        vext.second.pos.y > f.getTop() + ctx_.game->getFacilityHeight() + offset) {
+                        continue;
+                    }
+
+                    bool gotSomeGroup = false;
+                    for (const auto &gr: vext.second.v.getGroups()) {
+                        switch (gr) {
+                            case LAND_GROUP:
+                                gotFromLandGroup = true;
+                                gotSomeGroup = true;
+                                break;
+                            case AIR_GROUP:
+                                gotFromAirGroup = true;
+                                gotSomeGroup = true;
+                                break;
+                            case NUKE_GROUP:
+                                gotFromNukeGroup = true;
+                                gotSomeGroup = true;
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    if (!gotSomeGroup) {
+                        ++cnt;
+                    }
+                }
+
+                if (cnt >= 20) {
+                    Move m;
+                    m.setAction(ActionType::CLEAR_AND_SELECT);
+                    m.setLeft(clampX(f.getLeft() - offset));
+                    m.setTop(clampY(f.getTop() - offset));
+                    m.setRight(clampX(f.getLeft() + ctx_.game->getFacilityWidth() + offset));
+                    m.setBottom(clampY(f.getTop() + ctx_.game->getFacilityHeight() + offset));
+                    queueMove(0, m);
+
+                    if (gotFromLandGroup) {
+                        m.setAction(ActionType::DESELECT);
+                        m.setGroup(LAND_GROUP);
+                        queueMove(0, m);
+                    }
+                    if (gotFromAirGroup) {
+                        m.setAction(ActionType::DESELECT);
+                        m.setGroup(AIR_GROUP);
+                        queueMove(0, m);
+                    }
+                    if (gotFromNukeGroup) {
+                        m.setAction(ActionType::DESELECT);
+                        m.setGroup(NUKE_GROUP);
+                        queueMove(0, m);
+                    }
+
+                    const V2d c{f.getLeft() + ctx_.game->getFacilityWidth()/2.,
+                                f.getTop() + ctx_.game->getFacilityHeight()/2.};
+                    const auto t = target(c, true);
+                    m.setAction(ActionType::MOVE);
+                    m.setX(t.x - c.x);
+                    m.setY(t.y - c.y);
+                    queueMove(0, m);
+                }
+
+                if (f.getType() == FacilityType::VEHICLE_FACTORY) {
+                    int cntFigters = 0;
+                    for (const auto &vext: vehicles_) {
+                        if (vext.second.isMine && vext.second.v.getType() == VehicleType::FIGHTER) {
+                            ++cntFigters;
+                        }
+                    }
+
+                    if (cntFigters < 20 && f.getVehicleType() != VehicleType::FIGHTER) {
+                        Move m;
+                        m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
+                        m.setVehicleType(VehicleType::FIGHTER);
+                        m.setFacilityId(f.getId());
+                        queueMove(0, m);
+                    } else if (f.getVehicleType() == VehicleType::FIGHTER) {
+                        Move m;
+                        m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
+                        m.setVehicleType(VehicleType::IFV);
+                        m.setFacilityId(f.getId());
+                        queueMove(0, m);
+                    }
+                }
+            }
+            break;
+
+            case State::NotMine:
+                break;
+        }
+    }
 }

@@ -22,7 +22,7 @@ private:
     void queueMove(int delay, const model::Move &m, std::function<void(void)> &&f = std::function<void(void)>());
     bool executeDelayedMove(model::Move& move);
     void move();
-    V2d target() const;
+    V2d target(const V2d &c, bool acceptFacility, bool isMainForce = false) const;
     void nuke(const V2d &grPos, V2d &nukePos, VId &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
@@ -37,6 +37,7 @@ private:
     bool antiNuke();
     bool nukeStriker();
     bool onlyGroupSelected(int g) const;
+    void manageFacilities();
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;
