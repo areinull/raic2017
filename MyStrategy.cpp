@@ -352,12 +352,12 @@ void MyStrategy::move() {
         return;
     }
 
-    if (!isGroundStartup)
+    if (!isGroundStartup) {
         mainGround();
+        manageFacilities();
+    }
     if (!isAirStartup)
         mainAir();
-
-    manageFacilities();
 }
 
 void MyStrategy::queueMove(int delay, const Move &m, std::function<void(void)> &&f) {
@@ -1509,37 +1509,34 @@ bool MyStrategy::onlyGroupSelected(int g) const {
 
 void MyStrategy::manageFacilities() {
     enum class State {
-        CC,
         Idle,
         Producing,
-        NotMine
+        FinishedProduction,
+        ControlCenter,
+        Unknown
     };
-
-    static std::map<long long, State> facilities;
+    static std::unordered_set<long long> moveQueued;
 
     for (const auto &f: ctx_.world->getFacilities()) {
-        if (!facilities.count(f.getId())) {
-            if (f.getOwnerPlayerId() != ctx_.me->getId()) {
-                facilities[f.getId()] = State::NotMine;
-            } else if (f.getType() == FacilityType::CONTROL_CENTER) {
-                facilities[f.getId()] = State::CC;
-            } else if (f.getVehicleType() == VehicleType::_UNKNOWN_) {
-                facilities[f.getId()] = State::Idle;
-            } else {
-                facilities[f.getId()] = State::Producing;
-            }
-        }
-
         if (f.getOwnerPlayerId() != ctx_.me->getId()) {
-            facilities[f.getId()] = State::NotMine;
-        } else if (f.getType() == FacilityType::CONTROL_CENTER) {
-            facilities[f.getId()] = State::CC;
-        } else if (facilities[f.getId()] == State::NotMine) {
-            facilities[f.getId()] = State::Idle;
+            continue;
+        }
+        auto state = State::Unknown;
+        if (f.getType() == FacilityType::CONTROL_CENTER) {
+            state = State::ControlCenter;
+        } else if (f.getVehicleType() == VehicleType::_UNKNOWN_) {
+            state = State::Idle;
+        } else if (f.getProductionProgress()) {
+            state = State::Producing;
+        } else {
+            state = State::FinishedProduction;
         }
 
-        switch (facilities[f.getId()]) {
+        switch (state) {
             case State::Idle: {
+                if (moveQueued.count(f.getId())) {
+                    break;
+                }
                 constexpr double offset = 16.;
                 bool gotLandGroup = false;
                 for (const auto &vext: vehicles_) {
@@ -1565,13 +1562,12 @@ void MyStrategy::manageFacilities() {
                 m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
                 m.setFacilityId(f.getId());
                 m.setVehicleType(VehicleType::IFV);
-                queueMove(0, m);
-
-                facilities[f.getId()] = State::Producing;
+                queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
+                moveQueued.insert(f.getId());
             }
             break;
 
-            case State::CC:
+            case State::ControlCenter:
             case State::Producing: {
                 constexpr double offset = 16.;
                 bool gotFromLandGroup = false;
@@ -1637,42 +1633,50 @@ void MyStrategy::manageFacilities() {
                         queueMove(0, m);
                     }
 
-                    const V2d c{f.getLeft() + ctx_.game->getFacilityWidth()/2.,
-                                f.getTop() + ctx_.game->getFacilityHeight()/2.};
+                    const V2d c{f.getLeft() + ctx_.game->getFacilityWidth() / 2.,
+                                f.getTop() + ctx_.game->getFacilityHeight() / 2.};
                     const auto t = target(c, true);
                     m.setAction(ActionType::MOVE);
                     m.setX(t.x - c.x);
                     m.setY(t.y - c.y);
                     queueMove(0, m);
                 }
+            }
+            break;
 
-                if (f.getType() == FacilityType::VEHICLE_FACTORY) {
-                    int cntFigters = 0;
-                    for (const auto &vext: vehicles_) {
-                        if (vext.second.isMine && vext.second.v.getType() == VehicleType::FIGHTER) {
-                            ++cntFigters;
-                        }
+            case State::FinishedProduction: {
+                if (moveQueued.count(f.getId())) {
+                    break;
+                }
+                int cntFigters = 0;
+                for (const auto &vext: vehicles_) {
+                    if (vext.second.isMine && vext.second.v.getType() == VehicleType::FIGHTER) {
+                        ++cntFigters;
                     }
+                }
 
-                    if (cntFigters < 20 && f.getVehicleType() != VehicleType::FIGHTER) {
+                if (cntFigters < 20) {
+                    if (f.getVehicleType() != VehicleType::FIGHTER) {
                         Move m;
                         m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
                         m.setVehicleType(VehicleType::FIGHTER);
                         m.setFacilityId(f.getId());
-                        queueMove(0, m);
-                    } else if (f.getVehicleType() == VehicleType::FIGHTER) {
-                        Move m;
-                        m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
-                        m.setVehicleType(VehicleType::IFV);
-                        m.setFacilityId(f.getId());
-                        queueMove(0, m);
+                        queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
+                        moveQueued.insert(f.getId());
                     }
+                } else if (f.getVehicleType() == VehicleType::FIGHTER) {
+                    Move m;
+                    m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
+                    m.setVehicleType(VehicleType::IFV);
+                    m.setFacilityId(f.getId());
+                    queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
+                    moveQueued.insert(f.getId());
                 }
             }
             break;
 
-            case State::NotMine:
-                break;
+            case State::Unknown:
+            break;
         }
     }
 }
