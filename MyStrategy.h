@@ -34,6 +34,7 @@ private:
     bool mainAir();
     double clampX(double x) const;
     double clampY(double y) const;
+    V2d clamp4main(V2d c, V2d t) const;
     bool antiNuke();
     bool nukeStriker();
     bool onlyGroupSelected(int g) const;

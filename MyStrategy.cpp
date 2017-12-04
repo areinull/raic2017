@@ -414,7 +414,7 @@ bool MyStrategy::mainGround() {
 
     switch (state) {
         case State::Idle: {
-            t = target(pos, true, true);
+            t = clamp4main(pos, target(pos, true, true));
             d = t - pos;
             double dd = d.getNorm();
             ang = std::asin((rot.x * d.y - rot.y * d.x) / dd);
@@ -539,6 +539,36 @@ double MyStrategy::clampX(double x) const {
 
 double MyStrategy::clampY(double y) const {
     return std::max(0., std::min(ctx_.world->getHeight(), y));
+}
+
+V2d MyStrategy::clamp4main(V2d c, V2d t) const {
+    constexpr double offset = 20.;
+    double xmin = ctx_.game->getWorldWidth(),
+           xmax = 0.,
+           ymin = ctx_.game->getWorldHeight(),
+           ymax = 0.;
+    for (const auto &vext: vehicles_) {
+        if (!vext.second.isMine ||
+            std::find(vext.second.v.getGroups().begin(),
+                      vext.second.v.getGroups().end(),
+                      LAND_GROUP) == vext.second.v.getGroups().end()) {
+            continue;
+        }
+        xmin = std::min(xmin, vext.second.pos.x);
+        xmax = std::max(xmax, vext.second.pos.x);
+        ymin = std::min(ymin, vext.second.pos.y);
+        ymax = std::max(ymax, vext.second.pos.y);
+    }
+    const double dxmin = c.x - xmin,
+                 dxmax = xmax - c.x,
+                 dymin = c.y - ymin,
+                 dymax = ymax - c.y;
+    const double txmin = std::max(t.x - dxmin, offset) + dxmin,
+                 tymin = std::max(t.y - dymin, offset) + dymin,
+                 txmax = std::min(t.x + dxmax, ctx_.game->getWorldWidth()-offset) - dxmax,
+                 tymax = std::min(t.y + dymax, ctx_.game->getWorldHeight()-offset) - dymax;
+    return {std::max(txmin, std::min(txmax, t.x)),
+            std::max(tymin, std::min(tymax, t.y))};
 }
 
 bool MyStrategy::antiNuke() {
@@ -1516,9 +1546,15 @@ void MyStrategy::manageFacilities() {
         Unknown
     };
     static std::unordered_set<long long> moveQueued;
+    static std::unordered_set<long long> scaleQueued;
 
     for (const auto &f: ctx_.world->getFacilities()) {
         if (f.getOwnerPlayerId() != ctx_.me->getId()) {
+            moveQueued.erase(f.getId());
+            scaleQueued.erase(f.getId());
+            continue;
+        }
+        if (moveQueued.count(f.getId())) {
             continue;
         }
         auto state = State::Unknown;
@@ -1534,9 +1570,6 @@ void MyStrategy::manageFacilities() {
 
         switch (state) {
             case State::Idle: {
-                if (moveQueued.count(f.getId())) {
-                    break;
-                }
                 constexpr double offset = 16.;
                 bool gotLandGroup = false;
                 for (const auto &vext: vehicles_) {
@@ -1582,6 +1615,8 @@ void MyStrategy::manageFacilities() {
                         vext.second.pos.y < f.getTop() - offset ||
                         vext.second.pos.y > f.getTop() + ctx_.game->getFacilityHeight() + offset) {
                         continue;
+                    } else if (vext.second.hasMoved()) {
+                        break;
                     }
 
                     bool gotSomeGroup = false;
@@ -1635,19 +1670,27 @@ void MyStrategy::manageFacilities() {
 
                     const V2d c{f.getLeft() + ctx_.game->getFacilityWidth() / 2.,
                                 f.getTop() + ctx_.game->getFacilityHeight() / 2.};
-                    const auto t = target(c, true);
-                    m.setAction(ActionType::MOVE);
-                    m.setX(t.x - c.x);
-                    m.setY(t.y - c.y);
-                    queueMove(0, m);
+                    if (scaleQueued.count(f.getId())) {
+                        const auto t = target(c, true);
+                        m.setAction(ActionType::MOVE);
+                        m.setX(t.x - c.x);
+                        m.setY(t.y - c.y);
+                        queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
+                        scaleQueued.erase(f.getId());
+                    } else {
+                        m.setAction(ActionType::SCALE);
+                        m.setX(c.x);
+                        m.setY(c.y);
+                        m.setFactor(0.1);
+                        queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
+                        scaleQueued.insert(f.getId());
+                    }
+                    moveQueued.insert(f.getId());
                 }
             }
             break;
 
             case State::FinishedProduction: {
-                if (moveQueued.count(f.getId())) {
-                    break;
-                }
                 int cntFigters = 0;
                 for (const auto &vext: vehicles_) {
                     if (vext.second.isMine && vext.second.v.getType() == VehicleType::FIGHTER) {
