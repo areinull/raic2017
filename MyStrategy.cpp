@@ -433,18 +433,41 @@ bool MyStrategy::mainGround() {
         }
 
         case State::PreRotate: {
-            Move m;
-            m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setGroup(LAND_GROUP);
-            queueMove(0, m);
+            double xmin = ctx_.game->getWorldWidth(),
+                    xmax = 0.,
+                    ymin = ctx_.game->getWorldHeight(),
+                    ymax = 0.;
+            for (const auto &vext: vehicles_) {
+                if (!vext.second.isMine ||
+                    std::find(vext.second.v.getGroups().begin(),
+                              vext.second.v.getGroups().end(),
+                              LAND_GROUP) == vext.second.v.getGroups().end()) {
+                    continue;
+                }
+                xmin = std::min(xmin, vext.second.pos.x);
+                xmax = std::max(xmax, vext.second.pos.x);
+                ymin = std::min(ymin, vext.second.pos.y);
+                ymax = std::max(ymax, vext.second.pos.y);
+            }
+            const double ratio = (xmax - xmin)/(ymax - ymin);
+            constexpr double min_ratio = 1.5;
+            if (ratio < min_ratio && ratio > 1./min_ratio) {
+                state = State::PostRotate;
+                return mainGround();
+            } else {
+                Move m;
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setGroup(LAND_GROUP);
+                queueMove(0, m);
 
-            m.setAction(ActionType::SCALE);
-            m.setX(pos.x);
-            m.setY(pos.y);
-            m.setFactor(1.1);
-            queueMove(0, m);
+                m.setAction(ActionType::SCALE);
+                m.setX(pos.x);
+                m.setY(pos.y);
+                m.setFactor(1.1);
+                queueMove(0, m);
 
-            state = State::Rotate;
+                state = State::Rotate;
+            }
         }
         break;
 
