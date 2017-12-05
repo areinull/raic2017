@@ -242,8 +242,8 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
             continue;
 
         const double visionCoeff = v.second.v.isAerial()?
-                                   getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.pos.x%32][(int)v.second.pos.y%32]):
-                                   getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)v.second.pos.x%32][(int)v.second.pos.y%32]);
+                                   getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.pos.x/32][(int)v.second.pos.y/32]):
+                                   getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)v.second.pos.x/32][(int)v.second.pos.y/32]);
         const double score = v.second.v.getSquaredDistanceTo(pointA.x, pointA.y) - v.second.v.getVisionRange()*visionCoeff*v.second.v.getVisionRange()*visionCoeff;
         if (score < best_score) {
             best_score = score;
@@ -304,8 +304,8 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
         if (!v.second.isMine || v.first == vId)
             continue;
         const double visionCoeff = v.second.v.isAerial()?
-                                   getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.pos.x%32][(int)v.second.pos.y%32]):
-                                   getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)v.second.pos.x%32][(int)v.second.pos.y%32]);
+                                   getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)v.second.pos.x/32][(int)v.second.pos.y/32]):
+                                   getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)v.second.pos.x/32][(int)v.second.pos.y/32]);
         const double d = v.second.v.getSquaredDistanceTo(pointB.x, pointB.y) -
                 v.second.v.getSquaredVisionRange()*visionCoeff*visionCoeff;
         if (d < minDistSq) {
@@ -318,8 +318,8 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
 
     const double minDist = vehicles_[closestFriend].v.getDistanceTo(vehicles_[closestEnemy].v);
     const double visionCoeff = vehicles_[closestFriend].v.isAerial()?
-                               getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)vehicles_[closestFriend].pos.x%32][(int)vehicles_[closestFriend].pos.y%32]):
-                               getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)vehicles_[closestFriend].pos.x%32][(int)vehicles_[closestFriend].pos.y%32]);
+                               getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)vehicles_[closestFriend].pos.x/32][(int)vehicles_[closestFriend].pos.y/32]):
+                               getTerrainVisibility(ctx_.world->getTerrainByCellXY()[(int)vehicles_[closestFriend].pos.x/32][(int)vehicles_[closestFriend].pos.y/32]);
     const double curVisionRange = vehicles_[closestFriend].v.getVisionRange()*visionCoeff;
     if (minDist > ctx_.game->getTacticalNuclearStrikeRadius() && minDist < curVisionRange*0.95) {
         nukePos = pointB;
@@ -613,7 +613,10 @@ bool MyStrategy::antiNuke() {
             const double strikeX = ctx_.world->getOpponentPlayer().getNextNuclearStrikeX();
             const double strikeY = ctx_.world->getOpponentPlayer().getNextNuclearStrikeY();
             for (const auto &v: vehicles_) {
-                if (!v.second.isMine || v.first == vId)
+                if (!v.second.isMine ||
+                    std::find(v.second.v.getGroups().begin(),
+                              v.second.v.getGroups().end(),
+                              ANTINUKE_GROUP) == v.second.v.getGroups().end())
                     continue;
                 const auto d = v.second.v.getSquaredDistanceTo(strikeX, strikeY);
                 if (d < ctx_.game->getTacticalNuclearStrikeRadius()*ctx_.game->getTacticalNuclearStrikeRadius()) {
@@ -1455,15 +1458,33 @@ bool MyStrategy::nukeStriker() {
                     f.addObstacle(v.second.pos);
                 }
             }
+            f.addWeather(ctx_);
 
-            const auto path = f.pathToNeg(vehicles_[vId].pos);
+            auto path = f.pathToNeg(vehicles_[vId].pos, false);
 
             if (path.empty()) {
 //                std::cout << "empty" << std::endl;
-                state = State::Nuke;
-                return nukeStriker();
+                if (ctx_.me->getRemainingNuclearStrikeCooldownTicks() > 0) {
+                    path = f.pathToNeg(vehicles_[vId].pos, true);
+                    if (path.empty()) {
+                        state = State::Nuke;
+                        return nukeStriker();
+                    }
+                } else {
+                    state = State::Nuke;
+                    return nukeStriker();
+                }
             }
-            const auto dest = path[std::min(8, (int)path.size()-1)];
+
+            int dest_idx = 0;
+            for (int i = path.size()-1; i > 0; --i) {
+                if (f.segmentClear(vehicles_[vId].pos, path[i]) &&
+                    (path[i] - vehicles_[vId].pos).getNormSq() < 300.*300.) {
+                    dest_idx = i;
+                    break;
+                }
+            }
+            const auto dest = path[dest_idx];
 
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
@@ -1503,7 +1524,7 @@ bool MyStrategy::nukeStriker() {
                 return false;
             }
 
-            const double visionCoeff = getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)vehicles_[vId].pos.x%32][(int)vehicles_[vId].pos.y%32]);
+            const double visionCoeff = getWeatherVisibility(ctx_.world->getWeatherByCellXY()[(int)vehicles_[vId].pos.x/32][(int)vehicles_[vId].pos.y/32]);
             const double visionSq = (vehicles_[vId].v.getVisionRange()*visionCoeff)*(vehicles_[vId].v.getVisionRange()*visionCoeff);
             V2d t{0., 0.};
             int cnt = 0;

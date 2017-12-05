@@ -15,14 +15,17 @@ public:
     void clearField();
     void addUnit(const V2d &p);
     void addObstacle(const V2d &p);
-    std::vector<V2d> pathToNeg(const V2d &s) const;
+    void addWeather(const Context &ctx);
+    std::vector<V2d> pathToNeg(const V2d &s, bool global) const;
+    int value(const V2d &p) const;
+    bool segmentClear(const V2d &a, const V2d &b) const;
 
 private:
     static int clamp(int v);
     static int collapse(int x, int y);
     static std::pair<int, int> expand(int c);
 
-    std::vector<int> pathToNeg(int s) const;
+    std::vector<int> pathToNeg(int s, bool global) const;
 
 
     static constexpr double gridStride_ = 4.;

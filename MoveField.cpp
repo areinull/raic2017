@@ -5,6 +5,8 @@
 #include <unordered_set>
 #include <iostream>
 #include "Context.h"
+#include "model/World.h"
+#include "model/Game.h"
 #include "MoveField.h"
 
 MoveField::MoveField() {
@@ -43,6 +45,29 @@ void MoveField::addObstacle(const V2d &p) {
     }
 }
 
+void MoveField::addWeather(const Context &ctx) {
+    for (int x=0; x < gridMax_; ++x) {
+        for (int y=0; y < gridMax_; ++y) {
+            if (field_[x][y] < 0) {
+                const int wx = (int) (x * gridStride_) / 32;
+                const int wy = (int) (y * gridStride_) / 32;
+                double k;
+                switch (ctx.world->getWeatherByCellXY()[wx][wy]) {
+                    case model::WeatherType::CLOUD:
+                        k = ctx.game->getClearWeatherVisionFactor();
+                        break;
+                    case model::WeatherType::RAIN:
+                        k = ctx.game->getRainWeatherVisionFactor();
+                        break;
+                    default:
+                        k = ctx.game->getClearWeatherVisionFactor();
+                }
+                field_[x][y] = field_[x][y] * k;
+            }
+        }
+    }
+}
+
 std::ostream& operator<<(std::ostream &s, const MoveField &f) {
     for (int y = 0; y < MoveField::gridMax_; ++y) {
         for (int x = 0; x < MoveField::gridMax_; ++x) {
@@ -61,8 +86,24 @@ std::pair<int, int> MoveField::expand(int c) {
     return { c % gridMax_, c / gridMax_ };
 }
 
-std::vector<V2d> MoveField::pathToNeg(const V2d &s) const {
-    const auto p = pathToNeg(collapse(s.x/gridStride_, s.y/gridStride_));
+int MoveField::value(const V2d &p) const {
+    return field_[(int)(p.x/gridStride_)][(int)(p.y/gridStride_)];
+}
+
+bool MoveField::segmentClear(const V2d &a, const V2d &b) const {
+    const auto u = (b - a).unit();
+    const int n = (b - a).getNorm()/gridStride_;
+    for (int i = 1; i <= n; ++i) {
+        const auto c = a + u*gridStride_*i;
+        if (value(c) > 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<V2d> MoveField::pathToNeg(const V2d &s, bool global) const {
+    const auto p = pathToNeg(collapse(s.x/gridStride_, s.y/gridStride_), global);
     std::vector<V2d> res;
     res.reserve(p.size());
     std::transform(p.rbegin(), p.rend(), std::back_inserter(res), [](const int i) -> V2d {
@@ -72,7 +113,7 @@ std::vector<V2d> MoveField::pathToNeg(const V2d &s) const {
     return res;
 }
 
-std::vector<int> MoveField::pathToNeg(int s) const {
+std::vector<int> MoveField::pathToNeg(int s, bool global) const {
     const auto s_exp = expand(s);
     std::multimap<int, std::pair<int, int>> fringe;
     std::unordered_set<int> vis;
@@ -95,8 +136,12 @@ std::vector<int> MoveField::pathToNeg(int s) const {
         parent[cur] = prev;
 
         if ((field_[s_exp.first][s_exp.second] > 0 && field_[cur_exp.first][cur_exp.second] <= 0) ||
-            field_[cur_exp.first][cur_exp.second] < 0) {
+            (!global && field_[cur_exp.first][cur_exp.second] < 0) ||
+            (global && field_[cur_exp.first][cur_exp.second] < field_[s_exp.first][s_exp.second])) {
             dest = cur;
+            break;
+        }
+        if (global && cur_cost > 32) {
             break;
         }
 
