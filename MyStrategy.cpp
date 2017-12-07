@@ -9,6 +9,7 @@
 #include <iostream>
 #include <fstream>
 #include "MoveField.h"
+#include "Clusterize.h"
 
 using namespace model;
 
@@ -33,7 +34,9 @@ std::ostream& operator<<(std::ostream &s, VehicleType vt) {
     return s;
 }
 
-MyStrategy::MyStrategy() {
+MyStrategy::MyStrategy()
+    : clist_(nullptr)
+{
     ctx_.vehicleById = &vehicles_;
 }
 
@@ -87,6 +90,11 @@ void MyStrategy::initializeTick(const Player &me, const World &world, const Game
     ctx_.me = &me;
     ctx_.world = &world;
     ctx_.game = &game;
+
+    if (clist_) {
+        delete clist_;
+        clist_ = nullptr;
+    }
 
     for (auto &v: vehicles_) {
         v.second.prevPos = v.second.pos;
@@ -355,6 +363,9 @@ void MyStrategy::move() {
     if (!isGroundStartup) {
         mainGround();
         manageFacilities();
+        if (ctx_.world->getTickIndex()%120 == 0) {
+            manageClusters();
+        }
     }
     if (!isAirStartup)
         mainAir();
@@ -414,6 +425,54 @@ bool MyStrategy::mainGround() {
 
     switch (state) {
         case State::Idle: {
+            /*
+            {
+                if (!clist_) {
+                    clist_ = Clusterize::clusterize(ctx_, 10.);
+                }
+                double xmin = ctx_.world->getWidth(),
+                       xmax = 0.,
+                       ymin = ctx_.world->getHeight(),
+                       ymax = 0.;
+                for (const auto &c: clist_->myClusters) {
+                    if (c.type == VehicleType::HELICOPTER || c.type == VehicleType::FIGHTER) {
+                        continue;
+                    }
+                    bool gotLandGroup = false;
+                    for (auto vid: c.set) {
+                        if (std::find(vehicles_[vid].v.getGroups().begin(),
+                                      vehicles_[vid].v.getGroups().end(),
+                                      LAND_GROUP) != vehicles_[vid].v.getGroups().end()) {
+                            gotLandGroup = true;
+                            break;
+                        }
+                    }
+                    if (!gotLandGroup) {
+                        continue;
+                    }
+                    for (auto vid: c.set) {
+                        xmin = std::min(xmin, vehicles_[vid].pos.x);
+                        xmax = std::max(xmax, vehicles_[vid].pos.x);
+                        ymin = std::min(ymin, vehicles_[vid].pos.y);
+                        ymax = std::max(ymax, vehicles_[vid].pos.y);
+                    }
+                }
+
+                if (xmin < xmax && ymin < ymax) {
+                    Move m;
+                    m.setAction(ActionType::CLEAR_AND_SELECT);
+                    m.setLeft(xmin);
+                    m.setTop(ymin);
+                    m.setRight(xmax);
+                    m.setBottom(ymax);
+                    queueMove(0, m);
+
+                    m.setAction(ActionType::ASSIGN);
+                    m.setGroup(LAND_GROUP);
+                    queueMove(0, m);
+                }
+            }
+             */
             t = clamp4main(pos, target(pos, true, true));
             d = t - pos;
             double dd = d.getNorm();
@@ -1590,12 +1649,14 @@ void MyStrategy::manageFacilities() {
         Unknown
     };
     static std::unordered_set<long long> moveQueued;
-    static std::unordered_set<long long> scaleQueued;
+//    static std::unordered_set<long long> scaleQueued;
+
+//    bool switchedToHeli = false;
 
     for (const auto &f: ctx_.world->getFacilities()) {
         if (f.getOwnerPlayerId() != ctx_.me->getId()) {
             moveQueued.erase(f.getId());
-            scaleQueued.erase(f.getId());
+//            scaleQueued.erase(f.getId());
             continue;
         }
         if (moveQueued.count(f.getId())) {
@@ -1646,6 +1707,7 @@ void MyStrategy::manageFacilities() {
 
             case State::ControlCenter:
             case State::Producing: {
+                /*
                 constexpr double offset = 16.;
                 bool gotFromLandGroup = false;
                 bool gotFromAirGroup = false;
@@ -1731,6 +1793,7 @@ void MyStrategy::manageFacilities() {
                     }
                     moveQueued.insert(f.getId());
                 }
+                 */
             }
             break;
 
@@ -1758,12 +1821,147 @@ void MyStrategy::manageFacilities() {
                     m.setFacilityId(f.getId());
                     queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
                     moveQueued.insert(f.getId());
-                }
+                }/* else if (!switchedToHeli) {
+                    bool canSwitchToHeli = false;
+                    for (const auto &of: ctx_.world->getFacilities()) {
+                        if (of.getId() == f.getId() ||
+                            of.getType() != FacilityType::VEHICLE_FACTORY ||
+                            of.getOwnerPlayerId() != ctx_.me->getId()) {
+                            continue;
+                        }
+                        if (of.getVehicleType() == VehicleType::IFV) {
+                            canSwitchToHeli = true;
+                        }
+                    }
+                    if (canSwitchToHeli) {
+                        Move m;
+                        m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
+                        m.setVehicleType(VehicleType::HELICOPTER);
+                        m.setFacilityId(f.getId());
+                        queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
+                        moveQueued.insert(f.getId());
+                        switchedToHeli = true;
+                    }
+                }*/
             }
             break;
 
             case State::Unknown:
             break;
+        }
+    }
+}
+
+void MyStrategy::manageClusters() {
+    if (!clist_) {
+        clist_ = Clusterize::clusterize(ctx_, 10.);
+    }
+
+    for (const auto &c: clist_->myClusters) {
+        bool gotSomeGroup = false;
+        bool isMoving = false;
+        for (auto vid: c.set) {
+            if (vehicles_[vid].hasMoved()) {
+                isMoving = true;
+                break;
+            }
+            for (auto gr: vehicles_[vid].v.getGroups()) {
+                switch (gr) {
+                    case LAND_GROUP:
+                    case AIR_GROUP:
+                    case NUKE_GROUP:
+                        gotSomeGroup = true;
+                        break;
+                }
+            }
+            if (gotSomeGroup) {
+                break;
+            }
+        }
+        if (gotSomeGroup || isMoving) {
+            continue;
+        }
+
+        if (c.set.size() < 20) {
+            bool onFacility = false;
+            constexpr double offset = 10.;
+
+            for (const auto &f: ctx_.world->getFacilities()) {
+                if (onFacility) {
+                    break;
+                }
+                if (f.getOwnerPlayerId() != ctx_.me->getId() ||
+                    f.getType() != FacilityType::VEHICLE_FACTORY) {
+                    continue;
+                }
+                const double fxmin = f.getLeft() - offset,
+                             fxmax = f.getLeft()+ctx_.game->getFacilityWidth()+offset,
+                             fymin = f.getTop() - offset,
+                             fymax = f.getTop()+ctx_.game->getFacilityHeight()+offset;
+                for (auto vid: c.set) {
+                    if (vehicles_[vid].pos.x > fxmin &&
+                        vehicles_[vid].pos.x < fxmax &&
+                        vehicles_[vid].pos.y > fymin &&
+                        vehicles_[vid].pos.y < fymax) {
+                        onFacility = true;
+                        break;
+                    }
+                }
+            }
+
+            if (onFacility) {
+                continue;
+            }
+        }
+
+        double xmin = ctx_.world->getWidth(),
+                xmax = 0.,
+                ymin = ctx_.world->getHeight(),
+                ymax = 0.;
+        for (auto vid: c.set) {
+            xmin = std::min(xmin, vehicles_[vid].pos.x);
+            xmax = std::max(xmax, vehicles_[vid].pos.x);
+            ymin = std::min(ymin, vehicles_[vid].pos.y);
+            ymax = std::max(ymax, vehicles_[vid].pos.y);
+        }
+        V2d center = {(xmin+xmax)/2., (ymin+ymax)/2.};
+
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(xmin);
+        m.setTop(ymin);
+        m.setRight(xmax);
+        m.setBottom(ymax);
+        m.setVehicleType(c.type);
+        queueMove(0, m);
+
+        // check for compression
+        constexpr double min_ratio = 4.;
+        const double ratio = (xmax - xmin)/(ymax - ymin);
+        if (ratio > min_ratio || ratio < 1./min_ratio) {
+            m.setAction(ActionType::ROTATE);
+            m.setX(center.x);
+            m.setY(center.y);
+            m.setAngle(PI/4.);
+            queueMove(0, m);
+
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setLeft(std::min(xmin, center.x - (ymax - center.y)));
+            m.setTop(std::min(ymin, center.y - (center.x - xmin)));
+            m.setRight(std::max(xmax, center.x + (center.y - ymin)));
+            m.setBottom(std::max(ymax, center.y + (xmax - center.x)));
+            queueMove(60, m);
+
+            m.setAction(ActionType::SCALE);
+            m.setFactor(0.1);
+            queueMove(60, m);
+        } else {
+            V2d t = target(center, true, false);
+
+            m.setAction(ActionType::MOVE);
+            m.setX(t.x - center.x);
+            m.setY(t.y - center.y);
+            queueMove(0, m);
         }
     }
 }

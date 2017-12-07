@@ -9,6 +9,10 @@
 #include "Strategy.h"
 #include "Context.h"
 
+namespace Clusterize {
+    class ClusterLists;
+}
+
 class MyStrategy : public Strategy {
     using MoveQueue = std::multimap<int, std::pair<model::Move, std::function<void(void)>>>;
 
@@ -39,12 +43,14 @@ private:
     bool nukeStriker();
     bool onlyGroupSelected(int g) const;
     void manageFacilities();
+    void manageClusters();
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;
     Context ctx_;
     double slowestGroundSpeed_;
     double slowestAirSpeed_;
+    Clusterize::ClusterLists *clist_;
 };
 
 #endif
