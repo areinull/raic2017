@@ -1537,8 +1537,8 @@ bool MyStrategy::nukeStriker() {
 
             int dest_idx = 0;
             for (int i = path.size()-1; i > 0; --i) {
-                if (f.segmentClear(vehicles_[vId].pos, path[i]) &&
-                    (path[i] - vehicles_[vId].pos).getNormSq() < 300.*300.) {
+                if ((path[i] - vehicles_[vId].pos).getNormSq() < 100.*100. &&
+                    f.segmentClear(vehicles_[vId].pos, path[i])) {
                     dest_idx = i;
                     break;
                 }
