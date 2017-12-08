@@ -14,9 +14,11 @@
 using namespace model;
 
 namespace {
-    constexpr int MAIN_GROUP = 1;
+    constexpr int LAND_GROUP = 1;
+    constexpr int AIR_GROUP = 2;
     constexpr int NUKE_GROUP = 3;
     constexpr int ANTINUKE_GROUP = 4;
+    constexpr int MAIN_GROUP = 5;
     static VId vId = -1;
 }
 
@@ -275,7 +277,7 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
             continue;
         const double dmg = ctx_.game->getMaxTacticalNuclearStrikeDamage() * (1 - d/ctx_.game->getTacticalNuclearStrikeRadius());
         if (v.second.isMine) {
-            balanceDamage -= dmg;
+            balanceDamage -= 3.*dmg;
         } else {
             balanceDamage += dmg;
         }
@@ -388,8 +390,10 @@ bool MyStrategy::mainForce() {
                t{0., 0.},
                d{0., 0.};
     constexpr double dd_max = 64.;
+    constexpr int maxTickInaction = 60;
     static double ang = 0.;
     static bool waitingMoveQueue = false;
+    static int lastActionTick = 0;
 
     if (state == State::End)
         return false;
@@ -403,7 +407,8 @@ bool MyStrategy::mainForce() {
 
     if (state != State::NukeStrike) {
         for (const auto &v: vehicles_) {
-            if (v.second.isMine &&
+            if (ctx_.world->getTickIndex() - lastActionTick < maxTickInaction &&
+                v.second.isMine &&
                 std::find(v.second.v.getGroups().begin(),
                           v.second.v.getGroups().end(),
                           MAIN_GROUP) != v.second.v.getGroups().end() &&
@@ -413,9 +418,10 @@ bool MyStrategy::mainForce() {
             }
         }
     }
+    lastActionTick = ctx_.world->getTickIndex();
 
     bool haveUnits;
-    std::tie(haveUnits, pos) = getCenter();
+    std::tie(haveUnits, pos) = getCenter(LAND_GROUP);
     if (!haveUnits) {
         state = State::End;
         return false;
@@ -423,7 +429,6 @@ bool MyStrategy::mainForce() {
 
     switch (state) {
         case State::Idle: {
-            /*
             {
                 if (!clist_) {
                     clist_ = Clusterize::clusterize(ctx_, 10.);
@@ -433,19 +438,20 @@ bool MyStrategy::mainForce() {
                        ymin = ctx_.world->getHeight(),
                        ymax = 0.;
                 for (const auto &c: clist_->myClusters) {
-                    if (c.type == VehicleType::HELICOPTER || c.type == VehicleType::FIGHTER) {
+                    if (c.set.count(vId)) {
                         continue;
                     }
-                    bool gotLandGroup = false;
+                    bool gotMainGroup = false;
                     for (auto vid: c.set) {
+
                         if (std::find(vehicles_[vid].v.getGroups().begin(),
                                       vehicles_[vid].v.getGroups().end(),
-                                      LAND_GROUP) != vehicles_[vid].v.getGroups().end()) {
-                            gotLandGroup = true;
+                                      MAIN_GROUP) != vehicles_[vid].v.getGroups().end()) {
+                            gotMainGroup = true;
                             break;
                         }
                     }
-                    if (!gotLandGroup) {
+                    if (!gotMainGroup) {
                         continue;
                     }
                     for (auto vid: c.set) {
@@ -456,7 +462,9 @@ bool MyStrategy::mainForce() {
                     }
                 }
 
-                if (xmin < xmax && ymin < ymax) {
+                if (xmin < xmax && ymin < ymax &&
+                    (vehicles_[vId].pos.x < xmin || vehicles_[vId].pos.x > xmax ||
+                     vehicles_[vId].pos.y < ymin || vehicles_[vId].pos.y > ymax)) {
                     Move m;
                     m.setAction(ActionType::CLEAR_AND_SELECT);
                     m.setLeft(xmin);
@@ -466,26 +474,29 @@ bool MyStrategy::mainForce() {
                     queueMove(0, m);
 
                     m.setAction(ActionType::ASSIGN);
+                    m.setGroup(MAIN_GROUP);
+                    queueMove(0, m);
+
                     m.setGroup(LAND_GROUP);
                     queueMove(0, m);
                 }
             }
-             */
+
             t = clamp4main(pos, target(pos, true, true));
             d = t - pos;
             double dd = d.getNorm();
-            ang = std::asin((rot.x * d.y - rot.y * d.x) / dd);
+//            ang = std::asin((rot.x * d.y - rot.y * d.x) / dd);
             if (dd > dd_max) {
                 const double k = dd_max / dd;
                 d *= k;
                 dd = dd_max;
             }
-            if (std::abs(ang) > PI / 12.) {
-                rot = d/dd;
-                state = State::PreRotate;
-            } else {
+//            if (std::abs(ang) > PI / 12.) {
+//                rot = d/dd;
+//                state = State::PreRotate;
+//            } else {
                 state = State::Move;
-            }
+//            }
             return mainForce();
         }
 
@@ -564,7 +575,7 @@ bool MyStrategy::mainForce() {
         case State::Move: {
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setGroup(MAIN_GROUP);
+            m.setGroup(LAND_GROUP);
             queueMove(0, m);
 
             m.setAction(ActionType::MOVE);
@@ -572,6 +583,21 @@ bool MyStrategy::mainForce() {
             m.setY(d.y);
             m.setMaxSpeed(slowestGroundSpeed_);
             queueMove(0, m);
+
+            bool hasAir;
+            V2d posAir;
+            std::tie(hasAir, posAir) = getCenter(AIR_GROUP);
+            if (hasAir) {
+                m.setAction(ActionType::CLEAR_AND_SELECT);
+                m.setGroup(AIR_GROUP);
+                queueMove(0, m);
+
+                m.setAction(ActionType::MOVE);
+                m.setX(pos.x - posAir.x + d.x);
+                m.setY(pos.y - posAir.y + d.y);
+                m.setMaxSpeed(slowestGroundSpeed_);
+                queueMove(0, m);
+            }
 
             state = State::Idle;
         }
@@ -748,6 +774,8 @@ bool MyStrategy::startupFormation() {
         YArrange,
         Merge,
         Scale,
+        Rotate,
+        WaitEnd,
         End
     };
     static auto state{State::Init};
@@ -1078,9 +1106,63 @@ bool MyStrategy::startupFormation() {
             m.setGroup(MAIN_GROUP);
             queueMove(0, m);
 
-            state = State::End;
+            m.setAction(ActionType::DESELECT);
+            m.setGroup(0);
+            m.setVehicleType(VehicleType::FIGHTER);
+            queueMove(0, m);
+
+            m.setVehicleType(VehicleType::HELICOPTER);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ASSIGN);
+            m.setGroup(LAND_GROUP);
+            queueMove(0, m);
+
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setGroup(0);
+            m.setVehicleType(VehicleType::FIGHTER);
+            queueMove(0, m);
+
+            m.setAction(ActionType::DESELECT);
+            m.setGroup(NUKE_GROUP);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ADD_TO_SELECTION);
+            m.setGroup(0);
+            m.setVehicleType(VehicleType::HELICOPTER);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ASSIGN);
+            m.setGroup(AIR_GROUP);
+            queueMove(0, m);
+
+            state = State::Rotate;
         }
             break;
+
+        case State::Rotate: {
+            Move m;
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            m.setGroup(MAIN_GROUP);
+            queueMove(0, m);
+
+            V2d c;
+            std::tie(std::ignore, c) = getCenter(LAND_GROUP);
+
+            m.setAction(ActionType::ROTATE);
+            m.setX(c.x);
+            m.setY(c.y);
+            m.setAngle(PI/4.);
+            m.setMaxSpeed(slowestGroundSpeed_);
+            queueMove(0, m);
+
+            state = State::WaitEnd;
+        }
+        break;
+
+        case State::WaitEnd:
+            state = State::End;
+            return startupFormation();
 
         case State::End:
             return false;
@@ -1088,14 +1170,14 @@ bool MyStrategy::startupFormation() {
     return true;
 }
 
-std::pair<bool, V2d> MyStrategy::getCenter() const {
+std::pair<bool, V2d> MyStrategy::getCenter(int group) const {
     int cnt = 0;
     V2d res{0., 0.};
     for (const auto &v: vehicles_) {
         if (v.second.isMine &&
             std::find(v.second.v.getGroups().begin(),
                       v.second.v.getGroups().end(),
-                      MAIN_GROUP) != v.second.v.getGroups().end()) {
+                      group) != v.second.v.getGroups().end()) {
             res += v.second.pos;
             ++cnt;
         }
@@ -1168,6 +1250,9 @@ bool MyStrategy::nukeStriker() {
 
             m.setAction(ActionType::DISMISS);
             m.setGroup(MAIN_GROUP);
+            queueMove(0, m);
+
+            m.setGroup(AIR_GROUP);
             queueMove(0, m);
 
             m.setGroup(ANTINUKE_GROUP);
@@ -1346,6 +1431,7 @@ void MyStrategy::manageFacilities() {
 
         switch (state) {
             case State::Idle: {
+/*
                 constexpr double offset = 16.;
                 bool gotMainGroup = false;
                 for (const auto &vext: vehicles_) {
@@ -1366,7 +1452,7 @@ void MyStrategy::manageFacilities() {
                 }
                 if (gotMainGroup)
                     break;
-
+*/
                 Move m;
                 m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
                 m.setFacilityId(f.getId());
@@ -1597,7 +1683,7 @@ void MyStrategy::manageClusters() {
         V2d center = {(xmin+xmax)/2., (ymin+ymax)/2.};
 
         // check for compression
-        constexpr double min_ratio = 4.;
+        constexpr double min_ratio = 3.;
         const double ratio = (xmax - xmin)/(ymax - ymin);
         if (ratio > min_ratio || ratio < 1./min_ratio) {
             Move m;
@@ -1612,7 +1698,7 @@ void MyStrategy::manageClusters() {
             m.setAction(ActionType::ROTATE);
             m.setX(center.x);
             m.setY(center.y);
-            m.setAngle(PI/4.);
+            m.setAngle(PI/2.);
             queueMove(0, m);
 
             m.setAction(ActionType::CLEAR_AND_SELECT);
@@ -1620,11 +1706,11 @@ void MyStrategy::manageClusters() {
             m.setTop(std::min(ymin, center.y - (center.x - xmin)));
             m.setRight(std::max(xmax, center.x + (center.y - ymin)));
             m.setBottom(std::max(ymax, center.y + (xmax - center.x)));
-            queueMove(60, m);
+            queueMove(30, m);
 
             m.setAction(ActionType::SCALE);
             m.setFactor(0.1);
-            queueMove(60, m);
+            queueMove(30, m);
         } else {
             V2d t = target(center, true, false);
 

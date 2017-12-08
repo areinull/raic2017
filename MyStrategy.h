@@ -30,7 +30,7 @@ private:
     void nuke(const V2d &grPos, V2d &nukePos, VId &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
-    std::pair<bool, V2d> getCenter() const;
+    std::pair<bool, V2d> getCenter(int group) const;
 
     bool startupFormation();
     bool mainForce();
