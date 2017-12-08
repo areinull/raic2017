@@ -443,7 +443,6 @@ bool MyStrategy::mainForce() {
                     }
                     bool gotMainGroup = false;
                     for (auto vid: c.set) {
-
                         if (std::find(vehicles_[vid].v.getGroups().begin(),
                                       vehicles_[vid].v.getGroups().end(),
                                       MAIN_GROUP) != vehicles_[vid].v.getGroups().end()) {
@@ -1307,6 +1306,14 @@ bool MyStrategy::nukeStriker() {
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setGroup(NUKE_GROUP);
             queueMove(0, m);
+
+            for (int gr: vehicles_[vId].v.getGroups()) {
+                if (gr != NUKE_GROUP) {
+                    m.setAction(ActionType::DISMISS);
+                    m.setGroup(gr);
+                    queueMove(0, m);
+                }
+            }
 
             m.setAction(ActionType::MOVE);
             m.setX(dest.x - vehicles_[vId].pos.x);
