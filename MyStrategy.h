@@ -30,12 +30,10 @@ private:
     void nuke(const V2d &grPos, V2d &nukePos, VId &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
-    std::pair<bool, V2d> getCenter(bool isAerial) const;
+    std::pair<bool, V2d> getCenter() const;
 
-    bool startupGroundFormation();
-    bool startupAirFormation();
-    bool mainGround();
-    bool mainAir();
+    bool startupFormation();
+    bool mainForce();
     double clampX(double x) const;
     double clampY(double y) const;
     V2d clamp4main(V2d c, V2d t) const;
