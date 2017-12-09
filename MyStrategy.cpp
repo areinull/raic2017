@@ -154,21 +154,27 @@ bool MyStrategy::executeDelayedMove(Move& move) {
 V2d MyStrategy::target(const V2d &c, bool acceptFacility, bool isMainForce) const {
     V2d t{0., 0.};
 
-    // ближайшее нейтральное или чужое здание
+    // захват зданий
     while (acceptFacility) {
         int closestFacIdx = -1;
         double minDistSq = 1024.*1024.*4.;
         auto facilities = ctx_.world->getFacilities();
+
+        bool gotFactoryToCapture = false;
+        for (const auto &f: facilities) {
+            if (f.getType() == FacilityType::VEHICLE_FACTORY &&
+                f.getOwnerPlayerId() != ctx_.me->getId()) {
+                gotFactoryToCapture = true;
+                break;
+            }
+        }
+
         for (int i = 0, i_end = facilities.size(); i < i_end; ++i) {
-            if (facilities[i].getOwnerPlayerId() == ctx_.me->getId()) {
-                if (isMainForce && facilities[i].getType() == FacilityType::VEHICLE_FACTORY) {
-                    // захватываем основными силами только один завод
-                    closestFacIdx = -1;
-                    break;
-                }
+            if (facilities[i].getOwnerPlayerId() == ctx_.me->getId() &&
+                facilities[i].getCapturePoints() > 90.) {
                 continue;
             }
-            if (isMainForce && facilities[i].getType() != FacilityType::VEHICLE_FACTORY) {
+            if (isMainForce && gotFactoryToCapture && facilities[i].getType() != FacilityType::VEHICLE_FACTORY) {
                 continue;
             }
 
@@ -216,11 +222,9 @@ V2d MyStrategy::target(const V2d &c, bool acceptFacility, bool isMainForce) cons
             break;
         }
     }
-    if (gotEnemyInside) {
-        return t;
-    }
 
-    // в центре никого нет, ищем ближайший юнит
+    // ищем ближайший юнит
+    constexpr double minDistThresholdSq = 256.*256.;
     double minDistSq = std::numeric_limits<double>::max();
     VId closest = -1;
     for (const auto &vext: vehicles_) {
@@ -232,7 +236,8 @@ V2d MyStrategy::target(const V2d &c, bool acceptFacility, bool isMainForce) cons
             closest = vext.first;
         }
     }
-    if (closest >= 0) {
+
+    if ((!gotEnemyInside || minDistSq < minDistThresholdSq) && closest >= 0) {
         t = vehicles_.at(closest).pos;
     }
     return t;
@@ -370,7 +375,7 @@ void MyStrategy::move() {
     if (!isStartup) {
         mainForce();
         manageFacilities();
-        if (ctx_.world->getTickIndex()%120 == 0) {
+        if (ctx_.world->getTickIndex()%60 == 0) {
             manageClusters();
         }
     }
@@ -383,9 +388,6 @@ void MyStrategy::queueMove(int delay, const Move &m, std::function<void(void)> &
 bool MyStrategy::mainForce() {
     enum class State {
         Idle,
-        PreRotate,
-        Rotate,
-        PostRotate,
         Scale,
         Move,
         NukeStrike,
@@ -519,7 +521,10 @@ bool MyStrategy::mainForce() {
                 }
                 const double ratio = (xmax - xmin) / (ymax - ymin);
                 constexpr double min_ratio = 2.5;
-                if (ratio > min_ratio || ratio < 1. / min_ratio) {
+                constexpr double max_span = 200.;
+                if (ratio > min_ratio || ratio < 1. / min_ratio ||
+                    xmax - xmin > max_span ||
+                    ymax - ymin > max_span) {
                     state = State::Scale;
                     return mainForce();
                 }
@@ -537,56 +542,24 @@ bool MyStrategy::mainForce() {
             return mainForce();
         }
 
-        case State::PreRotate: {
-            double xmin = ctx_.game->getWorldWidth(),
-                    xmax = 0.,
-                    ymin = ctx_.game->getWorldHeight(),
-                    ymax = 0.;
-            for (const auto &vext: vehicles_) {
-                if (!vext.second.isMine ||
-                    std::find(vext.second.v.getGroups().begin(),
-                              vext.second.v.getGroups().end(),
-                              MAIN_GROUP) == vext.second.v.getGroups().end()) {
-                    continue;
-                }
-                xmin = std::min(xmin, vext.second.pos.x);
-                xmax = std::max(xmax, vext.second.pos.x);
-                ymin = std::min(ymin, vext.second.pos.y);
-                ymax = std::max(ymax, vext.second.pos.y);
-            }
-            const double ratio = (xmax - xmin)/(ymax - ymin);
-            constexpr double min_ratio = 1.5;
-            if (ratio < min_ratio && ratio > 1./min_ratio) {
-                state = State::PostRotate;
-                return mainForce();
-            } else {
-                Move m;
-                m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setGroup(MAIN_GROUP);
-                queueMove(0, m);
-
-                m.setAction(ActionType::SCALE);
-                m.setX(pos.x);
-                m.setY(pos.y);
-                m.setFactor(1.1);
-                queueMove(0, m);
-
-                state = State::Rotate;
-            }
-        }
-        break;
-
         case State::Scale: {
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setGroup(MAIN_GROUP);
             queueMove(0, m);
 
-            m.setAction(ActionType::SCALE);
+            m.setAction(ActionType::ROTATE);
             m.setX(pos.x);
             m.setY(pos.y);
-            m.setFactor(0.1);
+            m.setAngle(PI/4.);
             queueMove(0, m);
+
+            m.setAction(ActionType::CLEAR_AND_SELECT);
+            queueMove(60, m);
+
+            m.setAction(ActionType::SCALE);
+            m.setFactor(0.1);
+            queueMove(60, m);
 
             state = State::Idle;
         }
@@ -1433,7 +1406,6 @@ void MyStrategy::manageFacilities() {
         Unknown
     };
     static std::unordered_set<long long> moveQueued;
-//    static std::unordered_set<long long> scaleQueued;
 
 //    bool switchedToHeli = false;
 
@@ -1491,95 +1463,7 @@ void MyStrategy::manageFacilities() {
             break;
 
             case State::ControlCenter:
-            case State::Producing: {
-                /*
-                constexpr double offset = 16.;
-                bool gotFromLandGroup = false;
-                bool gotFromAirGroup = false;
-                bool gotFromNukeGroup = false;
-                int cnt = 0;
-
-                for (const auto &vext: vehicles_) {
-                    if (!vext.second.isMine ||
-                        vext.second.pos.x < f.getLeft() - offset ||
-                        vext.second.pos.x > f.getLeft() + ctx_.game->getFacilityWidth() + offset ||
-                        vext.second.pos.y < f.getTop() - offset ||
-                        vext.second.pos.y > f.getTop() + ctx_.game->getFacilityHeight() + offset) {
-                        continue;
-                    } else if (vext.second.hasMoved()) {
-                        break;
-                    }
-
-                    bool gotSomeGroup = false;
-                    for (const auto &gr: vext.second.v.getGroups()) {
-                        switch (gr) {
-                            case LAND_GROUP:
-                                gotFromLandGroup = true;
-                                gotSomeGroup = true;
-                                break;
-                            case AIR_GROUP:
-                                gotFromAirGroup = true;
-                                gotSomeGroup = true;
-                                break;
-                            case NUKE_GROUP:
-                                gotFromNukeGroup = true;
-                                gotSomeGroup = true;
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    if (!gotSomeGroup) {
-                        ++cnt;
-                    }
-                }
-
-                if (cnt >= 20) {
-                    Move m;
-                    m.setAction(ActionType::CLEAR_AND_SELECT);
-                    m.setLeft(clampX(f.getLeft() - offset));
-                    m.setTop(clampY(f.getTop() - offset));
-                    m.setRight(clampX(f.getLeft() + ctx_.game->getFacilityWidth() + offset));
-                    m.setBottom(clampY(f.getTop() + ctx_.game->getFacilityHeight() + offset));
-                    queueMove(0, m);
-
-                    if (gotFromLandGroup) {
-                        m.setAction(ActionType::DESELECT);
-                        m.setGroup(LAND_GROUP);
-                        queueMove(0, m);
-                    }
-                    if (gotFromAirGroup) {
-                        m.setAction(ActionType::DESELECT);
-                        m.setGroup(AIR_GROUP);
-                        queueMove(0, m);
-                    }
-                    if (gotFromNukeGroup) {
-                        m.setAction(ActionType::DESELECT);
-                        m.setGroup(NUKE_GROUP);
-                        queueMove(0, m);
-                    }
-
-                    const V2d c{f.getLeft() + ctx_.game->getFacilityWidth() / 2.,
-                                f.getTop() + ctx_.game->getFacilityHeight() / 2.};
-                    if (scaleQueued.count(f.getId())) {
-                        const auto t = target(c, true);
-                        m.setAction(ActionType::MOVE);
-                        m.setX(t.x - c.x);
-                        m.setY(t.y - c.y);
-                        queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
-                        scaleQueued.erase(f.getId());
-                    } else {
-                        m.setAction(ActionType::SCALE);
-                        m.setX(c.x);
-                        m.setY(c.y);
-                        m.setFactor(0.1);
-                        queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
-                        scaleQueued.insert(f.getId());
-                    }
-                    moveQueued.insert(f.getId());
-                }
-                 */
-            }
+            case State::Producing:
             break;
 
             case State::FinishedProduction: {
@@ -1590,7 +1474,7 @@ void MyStrategy::manageFacilities() {
                     }
                 }
 
-                if (cntFigters < 20) {
+                if (!cntFigters) {
                     if (f.getVehicleType() != VehicleType::FIGHTER) {
                         Move m;
                         m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
@@ -1675,7 +1559,8 @@ void MyStrategy::manageClusters() {
                     break;
                 }
                 if (f.getOwnerPlayerId() != ctx_.me->getId() ||
-                    f.getType() != FacilityType::VEHICLE_FACTORY) {
+                    f.getType() != FacilityType::VEHICLE_FACTORY ||
+                    f.getVehicleType() != c.type) {
                     continue;
                 }
                 const double fxmin = f.getLeft() - offset,
