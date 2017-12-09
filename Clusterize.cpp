@@ -50,6 +50,51 @@ namespace {
 
         return clusterList;
     }
+
+    Clusterize::ClusterList clusterizeImpl2(const Context &ctx, unsigned cnt, bool isAir, bool isMine, double dist) {
+        const double distSq = dist*dist;
+        std::vector<VId> ids;
+        ids.reserve(cnt);
+        for (const auto &vext: *ctx.vehicleById) {
+            if (vext.second.isMine == isMine && vext.second.v.isAerial() == isAir) {
+                ids.push_back(vext.first);
+            }
+        }
+
+        std::vector<int> clnum(cnt);
+        std::iota(clnum.begin(), clnum.end(), 1);
+        for (unsigned i = 0; i < cnt; ++i) {
+            for (unsigned j = i+1; j < cnt; ++j) {
+                if (clnum[j] == clnum[i]) {
+                    continue;
+                }
+                if ((*ctx.vehicleById)[ids[i]].v.getSquaredDistanceTo((*ctx.vehicleById)[ids[j]].v) < distSq) {
+                    const int oldidx = clnum[j];
+                    for (unsigned k = 0; k < cnt; ++k) {
+                        if (clnum[k] == oldidx) {
+                            clnum[k] = clnum[i];
+                        }
+                    }
+                }
+            }
+        }
+
+        std::unordered_map<int, int> clnum_map;
+        for (int n: clnum) {
+            if (!clnum_map.count(n)) {
+                clnum_map.emplace(n, clnum_map.size());
+            }
+        }
+        Clusterize::ClusterList clusterList(clnum_map.size());
+        for (auto &c: clusterList) {
+            c.isAir = isAir;
+        }
+        for (unsigned int i=0; i < cnt; ++i) {
+            clusterList[clnum_map[clnum[i]]].set.insert(ids[i]);
+        }
+
+        return clusterList;
+    }
 }
 
 namespace Clusterize {
@@ -76,6 +121,36 @@ namespace Clusterize {
                       std::make_move_iterator(cl.end()),
                       std::back_inserter(res->myClusters));
             cl = clusterizeImpl(ctx, en_cnt[i], (VehicleType)i, false, dist);
+            std::copy(std::make_move_iterator(cl.begin()),
+                      std::make_move_iterator(cl.end()),
+                      std::back_inserter(res->enemyClusters));
+        }
+
+        return res;
+    }
+
+    ClusterLists* clusterize2(const Context &ctx, double dist)
+    {
+        ClusterLists *res = new ClusterLists;
+
+        // count units of each type
+        unsigned my_cnt[] = {0, 0},
+                en_cnt[] = {0, 0};
+        for (const auto &vext: *ctx.vehicleById) {
+            if (vext.second.isMine) {
+                ++my_cnt[(int)vext.second.v.isAerial()];
+            } else {
+                ++en_cnt[(int)vext.second.v.isAerial()];
+            }
+        }
+
+        // clusterize for each type
+        for (int i=0; i < 2; ++i) {
+            auto cl = clusterizeImpl2(ctx, my_cnt[i], i>0, true, dist);
+            std::copy(std::make_move_iterator(cl.begin()),
+                      std::make_move_iterator(cl.end()),
+                      std::back_inserter(res->myClusters));
+            cl = clusterizeImpl2(ctx, en_cnt[i], i>0, false, dist);
             std::copy(std::make_move_iterator(cl.begin()),
                       std::make_move_iterator(cl.end()),
                       std::back_inserter(res->enemyClusters));

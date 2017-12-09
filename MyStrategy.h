@@ -43,6 +43,8 @@ private:
     void manageFacilities();
     void manageClusters();
 
+    model::VehicleType recommendVehicleType() const;
+
     VehicleById vehicles_;
     MoveQueue moveQueue_;
     Context ctx_;

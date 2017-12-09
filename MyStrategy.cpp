@@ -440,14 +440,14 @@ bool MyStrategy::mainForce() {
             // прилипание кластера
             {
                 if (!clist_) {
-                    clist_ = Clusterize::clusterize(ctx_, 10.);
+                    clist_ = Clusterize::clusterize2(ctx_, 10.);
                 }
                 double xmin = ctx_.world->getWidth(),
                        xmax = 0.,
                        ymin = ctx_.world->getHeight(),
                        ymax = 0.;
                 for (const auto &c: clist_->myClusters) {
-                    if (c.type == VehicleType::HELICOPTER || c.type == VehicleType::FIGHTER) {
+                    if (c.isAir) {
                         continue;
                     }
                     bool gotMainGroup = false;
@@ -484,6 +484,10 @@ bool MyStrategy::mainForce() {
                     m.setRight(xmax);
                     m.setBottom(ymax);
                     m.setVehicleType(VehicleType::IFV);
+                    queueMove(0, m);
+
+                    m.setAction(ActionType::ADD_TO_SELECTION);
+                    m.setVehicleType(VehicleType::TANK);
                     queueMove(0, m);
 
                     m.setAction(ActionType::ASSIGN);
@@ -1456,7 +1460,7 @@ void MyStrategy::manageFacilities() {
                 Move m;
                 m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
                 m.setFacilityId(f.getId());
-                m.setVehicleType(VehicleType::IFV);
+                m.setVehicleType(recommendVehicleType());
                 queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
                 moveQueued.insert(f.getId());
             }
@@ -1486,7 +1490,7 @@ void MyStrategy::manageFacilities() {
                 } else if (f.getVehicleType() == VehicleType::FIGHTER) {
                     Move m;
                     m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
-                    m.setVehicleType(VehicleType::IFV);
+                    m.setVehicleType(recommendVehicleType());
                     m.setFacilityId(f.getId());
                     queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
                     moveQueued.insert(f.getId());
@@ -1523,7 +1527,7 @@ void MyStrategy::manageFacilities() {
 
 void MyStrategy::manageClusters() {
     if (!clist_) {
-        clist_ = Clusterize::clusterize(ctx_, 10.);
+        clist_ = Clusterize::clusterize2(ctx_, 10.);
     }
 
     for (const auto &c: clist_->myClusters) {
@@ -1559,8 +1563,7 @@ void MyStrategy::manageClusters() {
                     break;
                 }
                 if (f.getOwnerPlayerId() != ctx_.me->getId() ||
-                    f.getType() != FacilityType::VEHICLE_FACTORY ||
-                    f.getVehicleType() != c.type) {
+                    f.getType() != FacilityType::VEHICLE_FACTORY) {
                     continue;
                 }
                 const double fxmin = f.getLeft() - offset,
@@ -1595,18 +1598,36 @@ void MyStrategy::manageClusters() {
         }
         V2d center = {(xmin+xmax)/2., (ymin+ymax)/2.};
 
+        std::array<bool, (int)VehicleType::_COUNT_> types;
+        types.fill(false);
+        for (auto vid: c.set) {
+            types[(int)vehicles_[vid].v.getType()] = true;
+        }
+
         // check for compression
         constexpr double min_ratio = 3.;
         const double ratio = (xmax - xmin)/(ymax - ymin);
         if (ratio > min_ratio || ratio < 1./min_ratio) {
             Move m;
-            m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setLeft(xmin);
-            m.setTop(ymin);
-            m.setRight(xmax);
-            m.setBottom(ymax);
-            m.setVehicleType(c.type);
-            queueMove(0, m);
+
+            bool firstSelect = true;
+            for (unsigned i=0; i < types.size(); ++i) {
+                if (!types[i]) {
+                    continue;
+                }
+                if (firstSelect) {
+                    firstSelect = false;
+                    m.setAction(ActionType::CLEAR_AND_SELECT);
+                    m.setLeft(xmin);
+                    m.setTop(ymin);
+                    m.setRight(xmax);
+                    m.setBottom(ymax);
+                } else {
+                    m.setAction(ActionType::ADD_TO_SELECTION);
+                }
+                m.setVehicleType((VehicleType)i);
+                queueMove(0, m);
+            }
 
             m.setAction(ActionType::ROTATE);
             m.setX(center.x);
@@ -1614,24 +1635,40 @@ void MyStrategy::manageClusters() {
             m.setAngle(PI/2.);
             queueMove(0, m);
 
-            m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setLeft(std::min(xmin, center.x - (ymax - center.y)));
-            m.setTop(std::min(ymin, center.y - (center.x - xmin)));
-            m.setRight(std::max(xmax, center.x + (center.y - ymin)));
-            m.setBottom(std::max(ymax, center.y + (xmax - center.x)));
-            queueMove(30, m);
+            firstSelect = true;
+            for (unsigned i=0; i < types.size(); ++i) {
+                if (!types[i]) {
+                    continue;
+                }
+                if (firstSelect) {
+                    firstSelect = false;
+                    m.setAction(ActionType::CLEAR_AND_SELECT);
+                    m.setLeft(std::min(xmin, center.x - (ymax - center.y)));
+                    m.setTop(std::min(ymin, center.y - (center.x - xmin)));
+                    m.setRight(std::max(xmax, center.x + (center.y - ymin)));
+                    m.setBottom(std::max(ymax, center.y + (xmax - center.x)));
+                } else {
+                    m.setAction(ActionType::ADD_TO_SELECTION);
+                }
+                m.setVehicleType((VehicleType)i);
+                queueMove(30, m);
+            }
 
             m.setAction(ActionType::SCALE);
             m.setFactor(0.1);
             queueMove(30, m);
-        } else if (c.type == VehicleType::FIGHTER || c.type == VehicleType::HELICOPTER) {
+        } else if (c.isAir) {
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setLeft(xmin);
             m.setTop(ymin);
             m.setRight(xmax);
             m.setBottom(ymax);
-            m.setVehicleType(c.type);
+            m.setVehicleType(VehicleType::HELICOPTER);
+            queueMove(0, m);
+
+            m.setAction(ActionType::ADD_TO_SELECTION);
+            m.setVehicleType(VehicleType::FIGHTER);
             queueMove(0, m);
 
             m.setAction(ActionType::ASSIGN);
@@ -1649,13 +1686,25 @@ void MyStrategy::manageClusters() {
             constexpr double etaSq = 4.;
             if ((t - center).getNormSq() > etaSq) {
                 Move m;
-                m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setLeft(xmin);
-                m.setTop(ymin);
-                m.setRight(xmax);
-                m.setBottom(ymax);
-                m.setVehicleType(c.type);
-                queueMove(0, m);
+
+                bool firstSelect = true;
+                for (unsigned i=0; i < types.size(); ++i) {
+                    if (!types[i]) {
+                        continue;
+                    }
+                    if (firstSelect) {
+                        firstSelect = false;
+                        m.setAction(ActionType::CLEAR_AND_SELECT);
+                        m.setLeft(xmin);
+                        m.setTop(ymin);
+                        m.setRight(xmax);
+                        m.setBottom(ymax);
+                    } else {
+                        m.setAction(ActionType::ADD_TO_SELECTION);
+                    }
+                    m.setVehicleType((VehicleType)i);
+                    queueMove(0, m);
+                }
 
                 m.setAction(ActionType::MOVE);
                 m.setX(t.x - center.x);
@@ -1664,4 +1713,35 @@ void MyStrategy::manageClusters() {
             }
         }
     }
+}
+
+VehicleType MyStrategy::recommendVehicleType() const {
+    VehicleType res = VehicleType::TANK;
+    int enAir = 0,
+        enGround = 0,
+        myIFV = 0,
+        myTank = 0;
+    for (const auto &vext: vehicles_) {
+        if (vext.second.isMine) {
+            switch (vext.second.v.getType()) {
+                case VehicleType::IFV: ++myIFV; break;
+                case VehicleType::TANK: ++myTank; break;
+                default: ;
+            }
+        } else {
+            if (vext.second.v.isAerial()) {
+                ++enAir;
+            } else {
+                ++enGround;
+            }
+        }
+    }
+
+    if (enAir > enGround && myIFV < enAir*2) {
+        res = VehicleType::IFV;
+    } else {
+        res = VehicleType::TANK;
+    }
+
+    return res;
 }

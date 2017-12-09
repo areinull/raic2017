@@ -10,7 +10,10 @@
 namespace Clusterize {
     struct Cluster {
         std::unordered_set<VId> set;
-        model::VehicleType type;
+        union {
+            model::VehicleType type;
+            bool isAir;
+        };
     };
     using ClusterList = std::deque<Cluster>;
     struct ClusterLists {
@@ -18,6 +21,7 @@ namespace Clusterize {
     };
 
     ClusterLists* clusterize(const Context &ctx, double dist);
+    ClusterLists* clusterize2(const Context &ctx, double dist);
 }
 
 
