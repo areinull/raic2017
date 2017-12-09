@@ -1554,36 +1554,33 @@ void MyStrategy::manageClusters() {
             continue;
         }
 
-        if (c.set.size() < 33) {
-            bool onFacility = false;
-            constexpr double offset = 10.;
-
-            for (const auto &f: ctx_.world->getFacilities()) {
-                if (onFacility) {
-                    break;
-                }
-                if (f.getOwnerPlayerId() != ctx_.me->getId() ||
-                    f.getType() != FacilityType::VEHICLE_FACTORY) {
-                    continue;
-                }
-                const double fxmin = f.getLeft() - offset,
-                             fxmax = f.getLeft()+ctx_.game->getFacilityWidth()+offset,
-                             fymin = f.getTop() - offset,
-                             fymax = f.getTop()+ctx_.game->getFacilityHeight()+offset;
-                for (auto vid: c.set) {
-                    if (vehicles_[vid].pos.x > fxmin &&
-                        vehicles_[vid].pos.x < fxmax &&
-                        vehicles_[vid].pos.y > fymin &&
-                        vehicles_[vid].pos.y < fymax) {
-                        onFacility = true;
-                        break;
-                    }
-                }
-            }
-
+        bool onFacility = false;
+        constexpr double offset = 10.;
+        for (const auto &f: ctx_.world->getFacilities()) {
             if (onFacility) {
+                break;
+            }
+            if (f.getOwnerPlayerId() != ctx_.me->getId() ||
+                f.getType() != FacilityType::VEHICLE_FACTORY) {
                 continue;
             }
+            const double fxmin = f.getLeft() - offset,
+                    fxmax = f.getLeft()+ctx_.game->getFacilityWidth()+offset,
+                    fymin = f.getTop() - offset,
+                    fymax = f.getTop()+ctx_.game->getFacilityHeight()+offset;
+            for (auto vid: c.set) {
+                if (vehicles_[vid].pos.x > fxmin &&
+                    vehicles_[vid].pos.x < fxmax &&
+                    vehicles_[vid].pos.y > fymin &&
+                    vehicles_[vid].pos.y < fymax) {
+                    onFacility = true;
+                    break;
+                }
+            }
+        }
+
+        if (c.set.size() < 33 && onFacility) {
+            continue;
         }
 
         double xmin = ctx_.world->getWidth(),
@@ -1596,6 +1593,10 @@ void MyStrategy::manageClusters() {
             ymin = std::min(ymin, vehicles_[vid].pos.y);
             ymax = std::max(ymax, vehicles_[vid].pos.y);
         }
+        xmin -= 5.;
+        xmax += 5.;
+        ymin -= 5.;
+        ymax += 5.;
         V2d center = {(xmin+xmax)/2., (ymin+ymax)/2.};
 
         std::array<bool, (int)VehicleType::_COUNT_> types;
@@ -1607,7 +1608,9 @@ void MyStrategy::manageClusters() {
         // check for compression
         constexpr double min_ratio = 3.;
         const double ratio = (xmax - xmin)/(ymax - ymin);
-        if (ratio > min_ratio || ratio < 1./min_ratio) {
+        if (!onFacility &&
+            c.set.size() > 10 &&
+            (ratio > min_ratio || ratio < 1./min_ratio)) {
             Move m;
 
             bool firstSelect = true;
