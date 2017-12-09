@@ -183,6 +183,40 @@ V2d MyStrategy::target(const V2d &c, bool acceptFacility, bool isMainForce) cons
             break;
         t.x = facilities[closestFacIdx].getLeft() + ctx_.game->getFacilityWidth()/2.;
         t.y = facilities[closestFacIdx].getTop() + ctx_.game->getFacilityHeight()/2.;
+
+        // check for enemy close to facility
+        constexpr double facOff = 10.;
+        const double xleft = facilities[closestFacIdx].getLeft() - facOff,
+                     xright = facilities[closestFacIdx].getLeft() + ctx_.game->getFacilityWidth() + facOff,
+                     ytop = facilities[closestFacIdx].getTop() - facOff,
+                     ybottom = facilities[closestFacIdx].getTop() + ctx_.game->getFacilityHeight() + facOff;
+        std::unordered_set<VId> envid;
+        for (const auto &vext: vehicles_) {
+            if (!vext.second.isMine &&
+                vext.second.pos.x > xleft &&
+                vext.second.pos.x < xright &&
+                vext.second.pos.y > ytop &&
+                vext.second.pos.y < ybottom) {
+                envid.insert(vext.first);
+            }
+        }
+        if (!envid.empty()) {
+            VId closestEn;
+            minDistSq = 1024. * 1024. * 4.;
+            for (VId vid: envid) {
+                const double distSq = vehicles_.at(vid).v.getSquaredDistanceTo(t.x, t.y);
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                    closestEn = vid;
+                }
+            }
+            t.x = std::max(facilities[closestFacIdx].getLeft(),
+                           std::min(facilities[closestFacIdx].getLeft() + ctx_.game->getFacilityWidth(),
+                                    vehicles_.at(closestEn).pos.x));
+            t.y = std::max(facilities[closestFacIdx].getTop(),
+                           std::min(facilities[closestFacIdx].getTop() + ctx_.game->getFacilityHeight(),
+                                    vehicles_.at(closestEn).pos.y));
+        }
         return t;
     }
 
