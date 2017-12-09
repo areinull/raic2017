@@ -424,8 +424,57 @@ bool MyStrategy::mainForce() {
     bool haveUnits;
     std::tie(haveUnits, pos) = getCenter(LAND_GROUP);
     if (!haveUnits) {
-        state = State::End;
-        return false;
+        if (!clist_) {
+            clist_ = Clusterize::clusterize2(ctx_, 10.);
+        }
+        unsigned max_size = 0;
+        int idx = -1;
+        for (int i=0; i < clist_->myClusters.size(); ++i) {
+            if (!clist_->myClusters[i].isAir && clist_->myClusters[i].set.size() > max_size) {
+                max_size = clist_->myClusters[i].set.size();
+                idx = i;
+            }
+        }
+
+        if (idx < 0) {
+            state = State::End;
+            return false;
+        }
+
+        const auto &c = clist_->myClusters[idx].set;
+        double xmin = ctx_.world->getWidth(),
+                xmax = 0.,
+                ymin = ctx_.world->getHeight(),
+                ymax = 0.;
+        for (const auto &vid: c) {
+            xmin = std::min(xmin, vehicles_[vid].pos.x);
+            xmax = std::max(xmax, vehicles_[vid].pos.x);
+            ymin = std::min(ymin, vehicles_[vid].pos.y);
+            ymax = std::max(ymax, vehicles_[vid].pos.y);
+        }
+
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(xmin);
+        m.setTop(ymin);
+        m.setRight(xmax);
+        m.setBottom(ymax);
+        m.setVehicleType(VehicleType::IFV);
+        queueMove(0, m);
+
+        m.setAction(ActionType::ADD_TO_SELECTION);
+        m.setVehicleType(VehicleType::TANK);
+        queueMove(0, m);
+
+        m.setAction(ActionType::ASSIGN);
+        m.setGroup(MAIN_GROUP);
+        queueMove(0, m);
+
+        m.setGroup(LAND_GROUP);
+        queueMove(0, m);
+
+        state = State::Idle;
+        return true;
     }
 
     switch (state) {
