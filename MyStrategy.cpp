@@ -1416,7 +1416,6 @@ void MyStrategy::manageFacilities() {
     for (const auto &f: ctx_.world->getFacilities()) {
         if (f.getOwnerPlayerId() != ctx_.me->getId()) {
             moveQueued.erase(f.getId());
-//            scaleQueued.erase(f.getId());
             continue;
         }
         if (moveQueued.count(f.getId())) {
@@ -1478,6 +1477,7 @@ void MyStrategy::manageFacilities() {
                     }
                 }
 
+                const auto rvt = recommendVehicleType();
                 if (!cntFigters) {
                     if (f.getVehicleType() != VehicleType::FIGHTER) {
                         Move m;
@@ -1487,10 +1487,11 @@ void MyStrategy::manageFacilities() {
                         queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
                         moveQueued.insert(f.getId());
                     }
-                } else if (f.getVehicleType() == VehicleType::FIGHTER) {
+                } else if (f.getVehicleType() == VehicleType::FIGHTER ||
+                           f.getVehicleType() != rvt) {
                     Move m;
                     m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
-                    m.setVehicleType(recommendVehicleType());
+                    m.setVehicleType(rvt);
                     m.setFacilityId(f.getId());
                     queueMove(0, m, [&moveQueued, fid = f.getId()]() { moveQueued.erase(fid); });
                     moveQueued.insert(f.getId());
