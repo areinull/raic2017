@@ -123,13 +123,6 @@ void MyStrategy::initializeTick(const Player &me, const World &world, const Game
 }
 
 bool MyStrategy::executeDelayedMove(Move& move) {
-#ifdef MYDEBUG
-    static unsigned callNum = 0;
-    if (++callNum%20 == 0) {
-        std::cout << '\n';
-    }
-    std::cout << moveQueue_.size() << ' ' << std::flush;
-#endif
     if (moveQueue_.empty())
         return false;
 
@@ -1434,8 +1427,7 @@ void MyStrategy::manageFacilities() {
 
         switch (state) {
             case State::Idle: {
-/*
-                constexpr double offset = 16.;
+                constexpr double offset = 5.;
                 bool gotMainGroup = false;
                 for (const auto &vext: vehicles_) {
                     if (!vext.second.isMine ||
@@ -1455,7 +1447,7 @@ void MyStrategy::manageFacilities() {
                 }
                 if (gotMainGroup)
                     break;
-*/
+
                 Move m;
                 m.setAction(ActionType::SETUP_VEHICLE_PRODUCTION);
                 m.setFacilityId(f.getId());
