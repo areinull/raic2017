@@ -21,7 +21,7 @@ int MoveField::clamp(int v) {
     return std::max(0, std::min(gridMax_-1, v));
 }
 
-void MoveField::addUnit(const V2d &p) {
+void MoveField::addEnemyUnit(const V2d &p) {
     const int xi = p.x/gridStride_;
     const int yi = p.y/gridStride_;
     for (int x = clamp(xi-nukeRange_), x_end = clamp(xi+nukeRange_)+1; x < x_end; ++x) {
@@ -35,7 +35,7 @@ void MoveField::addUnit(const V2d &p) {
     }
 }
 
-void MoveField::addObstacle(const V2d &p) {
+void MoveField::addFriendUnit(const V2d &p) {
     const int xi = p.x/gridStride_;
     const int yi = p.y/gridStride_;
     for (int x = clamp(xi-1), x_end = clamp(xi+1)+1; x < x_end; ++x) {
@@ -43,6 +43,12 @@ void MoveField::addObstacle(const V2d &p) {
             field_[x][y] = 100;
         }
     }
+}
+
+void MoveField::addPoint(const V2d &p, int v) {
+    const int xi = p.x/gridStride_;
+    const int yi = p.y/gridStride_;
+    field_[xi][yi] += v;
 }
 
 void MoveField::addWeather(const Context &ctx) {

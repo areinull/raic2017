@@ -145,7 +145,7 @@ bool MyStrategy::executeDelayedMove(Move& move) {
 }
 
 V2d MyStrategy::target(const V2d &c, bool acceptFacility, bool isMainForce) const {
-    V2d t{0., 0.};
+    V2d t{ctx_.world->getWidth()/2., ctx_.world->getHeight()/2.};
 
     // захват зданий
     while (acceptFacility) {
@@ -513,6 +513,9 @@ bool MyStrategy::mainForce() {
 
     switch (state) {
         case State::Idle: {
+            if (waitingMoveQueue) {
+                break;
+            }
             // прилипание кластера
             {
                 if (!clist_) {
@@ -571,12 +574,12 @@ bool MyStrategy::mainForce() {
                     queueMove(0, m);
 
                     m.setGroup(LAND_GROUP);
-                    queueMove(0, m);
+                    queueMove(0, m, [&waitingMoveQueue](){ waitingMoveQueue = false; });
+                    waitingMoveQueue = true;
 
                     //m.setGroup(ANTINUKE_GROUP);
                     //queueMove(0, m);
 
-                    state = State::Scale;
                     break;
                 }
             }
@@ -1344,10 +1347,16 @@ bool MyStrategy::nukeStriker() {
             MoveField f;
             for (const auto &v: vehicles_) {
                 if (!v.second.isMine) {
-                    f.addUnit(v.second.pos);
+                    f.addEnemyUnit(v.second.pos);
                 } else if (v.second.v.isAerial() && v.first != vId) {
-                    f.addObstacle(v.second.pos);
+                    f.addFriendUnit(v.second.pos);
                 }
+            }
+            bool hasMain;
+            V2d mainPos;
+            std::tie(hasMain, mainPos) = getCenter(MAIN_GROUP);
+            if (hasMain) {
+                f.addPoint({ctx_.game->getWorldWidth() - mainPos.x, ctx_.game->getWorldHeight() - mainPos.y}, -1);
             }
             f.addWeather(ctx_);
 

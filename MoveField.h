@@ -13,8 +13,9 @@ public:
     MoveField();
 
     void clearField();
-    void addUnit(const V2d &p);
-    void addObstacle(const V2d &p);
+    void addEnemyUnit(const V2d &p);
+    void addFriendUnit(const V2d &p);
+    void addPoint(const V2d &p, int v);
     void addWeather(const Context &ctx);
     std::vector<V2d> pathToNeg(const V2d &s, bool global) const;
     int value(const V2d &p) const;
@@ -32,6 +33,7 @@ private:
     static constexpr int gridMax_ = 1024 / gridStride_;
     static constexpr int fireRange_ = (50-1)/gridStride_+1;
     static constexpr int nukeRange_ = (55-1)/gridStride_+1;
+    static constexpr int visionRange_ = (100-1)/gridStride_+1;
 
     int field_[gridMax_][gridMax_];
 
