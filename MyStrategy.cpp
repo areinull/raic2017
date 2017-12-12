@@ -81,8 +81,6 @@ void MyStrategy::initializeStrategy(const model::Game &game) {
     if (firstTime) {
         firstTime = false;
         srand(game.getRandomSeed());
-        slowestGroundSpeed_ = game.getTankSpeed() * game.getSwampTerrainSpeedFactor();
-        slowestAirSpeed_ = game.getHelicopterSpeed() * game.getRainWeatherSpeedFactor();
         ctx_.vehicleById = &vehicles_;
     }
 }
@@ -649,6 +647,8 @@ bool MyStrategy::mainForce() {
         break;
 
         case State::Move: {
+            const auto prefSpeed = getPreferedGroundSpeed();
+
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
             m.setGroup(LAND_GROUP);
@@ -657,7 +657,7 @@ bool MyStrategy::mainForce() {
             m.setAction(ActionType::MOVE);
             m.setX(d.x);
             m.setY(d.y);
-            m.setMaxSpeed(slowestGroundSpeed_);
+            m.setMaxSpeed(prefSpeed);
             queueMove(0, m);
 
             bool hasAir;
@@ -671,7 +671,7 @@ bool MyStrategy::mainForce() {
                 m.setAction(ActionType::MOVE);
                 m.setX(pos.x - posAir.x + d.x);
                 m.setY(pos.y - posAir.y + d.y);
-                m.setMaxSpeed(slowestGroundSpeed_);
+                m.setMaxSpeed(prefSpeed);
                 queueMove(0, m);
             }
 
@@ -1229,7 +1229,7 @@ bool MyStrategy::startupFormation() {
             m.setX(c.x);
             m.setY(c.y);
             m.setAngle(PI/4.);
-            m.setMaxSpeed(slowestGroundSpeed_);
+            m.setMaxSpeed(getPreferedGroundSpeed());
             queueMove(0, m);
 
             state = State::WaitEnd;
@@ -1263,6 +1263,54 @@ std::pair<bool, V2d> MyStrategy::getCenter(int group) const {
     }
     res /= cnt;
     return {true, res};
+}
+
+double MyStrategy::getPreferedGroundSpeed() const {
+    double xmin = ctx_.world->getWidth(),
+            xmax = 0.,
+            ymin = ctx_.world->getHeight(),
+            ymax = 0.;
+    for (const auto &vext: vehicles_) {
+        if (vext.second.isMine &&
+            std::find(vext.second.v.getGroups().begin(),
+                      vext.second.v.getGroups().end(),
+                      MAIN_GROUP) != vext.second.v.getGroups().end()) {
+            xmin = std::min(xmin, vext.second.pos.x);
+            xmax = std::max(xmax, vext.second.pos.x);
+            ymin = std::min(ymin, vext.second.pos.y);
+            ymax = std::max(ymax, vext.second.pos.y);
+        }
+    }
+    if (xmin > xmax || ymin > ymax) {
+        return 0.;
+    }
+
+    constexpr double offset = 64.;
+    const auto &ter = ctx_.world->getTerrainByCellXY();
+    bool gotSwamp = false;
+    bool gotForest = false;
+    const unsigned ximin = static_cast<unsigned>(clampX(xmin - offset))/32;
+    const unsigned ximax = static_cast<unsigned>(clampX(xmax + offset))/32;
+    const unsigned yimin = static_cast<unsigned>(clampY(ymin - offset))/32;
+    const unsigned yimax = static_cast<unsigned>(clampY(ymax + offset))/32;
+    for (unsigned x = ximin; x <= ximax; ++x) {
+        for (unsigned y = yimin; y <= yimax; ++y) {
+            if (ter[x][y] == TerrainType::SWAMP) {
+                gotSwamp = true;
+                goto final;
+            } else if (ter[x][y] == TerrainType::FOREST) {
+                gotForest = true;
+            }
+        }
+    }
+final:
+    if (gotSwamp) {
+        return ctx_.game->getSwampTerrainSpeedFactor() * ctx_.game->getTankSpeed();
+    } else if (gotForest) {
+        return ctx_.game->getForestTerrainSpeedFactor() * ctx_.game->getTankSpeed();
+    } else {
+        return ctx_.game->getTankSpeed();
+    }
 }
 
 bool MyStrategy::nukeStriker() {

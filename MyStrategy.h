@@ -42,14 +42,13 @@ private:
     bool onlyGroupSelected(int g) const;
     void manageFacilities();
     void manageClusters();
+    double getPreferedGroundSpeed() const;
 
     model::VehicleType recommendVehicleType() const;
 
     VehicleById vehicles_;
     MoveQueue moveQueue_;
     Context ctx_;
-    double slowestGroundSpeed_;
-    double slowestAirSpeed_;
     Clusterize::ClusterLists *clist_;
 };
 
