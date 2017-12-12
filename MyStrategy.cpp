@@ -14,11 +14,8 @@
 using namespace model;
 
 namespace {
-    constexpr int LAND_GROUP = 1;
-    constexpr int AIR_GROUP = 2;
     constexpr int NUKE_GROUP = 3;
-    constexpr int ANTINUKE_GROUP = 4;
-    constexpr int MAIN_GROUP = 4; // same as antinuke for now
+    constexpr int MAIN_GROUP = 4;
     static VId vId = -1;
 }
 
@@ -375,20 +372,6 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
 
 
 void MyStrategy::move() {
-    if (ctx_.world->getTickIndex() == 0) {
-        Move m;
-        m.setAction(ActionType::CLEAR_AND_SELECT);
-        m.setLeft(0);
-        m.setTop(0);
-        m.setRight(ctx_.world->getWidth());
-        m.setBottom(ctx_.world->getHeight());
-        queueMove(0, m);
-
-        m.setAction(ActionType::ASSIGN);
-        m.setGroup(ANTINUKE_GROUP);
-        queueMove(0, m);
-    }
-
     nukeStriker();
 
     const bool isStartup = startupFormation();
@@ -454,7 +437,7 @@ bool MyStrategy::mainForce() {
     lastActionTick = ctx_.world->getTickIndex();
 
     bool haveUnits;
-    std::tie(haveUnits, pos) = getCenter(LAND_GROUP);
+    std::tie(haveUnits, pos) = getCenter(MAIN_GROUP, true, false);
     if (!haveUnits) {
         if (!clist_) {
             clist_ = Clusterize::clusterize2(ctx_, 10.);
@@ -500,9 +483,6 @@ bool MyStrategy::mainForce() {
 
         m.setAction(ActionType::ASSIGN);
         m.setGroup(MAIN_GROUP);
-        queueMove(0, m);
-
-        m.setGroup(LAND_GROUP);
         queueMove(0, m);
 
         state = State::Idle;
@@ -569,14 +549,8 @@ bool MyStrategy::mainForce() {
 
                     m.setAction(ActionType::ASSIGN);
                     m.setGroup(MAIN_GROUP);
-                    queueMove(0, m);
-
-                    m.setGroup(LAND_GROUP);
                     queueMove(0, m, [&waitingMoveQueue](){ waitingMoveQueue = false; });
                     waitingMoveQueue = true;
-
-                    //m.setGroup(ANTINUKE_GROUP);
-                    //queueMove(0, m);
 
                     break;
                 }
@@ -651,7 +625,7 @@ bool MyStrategy::mainForce() {
 
             Move m;
             m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setGroup(LAND_GROUP);
+            m.setGroup(MAIN_GROUP);
             queueMove(0, m);
 
             m.setAction(ActionType::MOVE);
@@ -662,10 +636,15 @@ bool MyStrategy::mainForce() {
 
             bool hasAir;
             V2d posAir;
-            std::tie(hasAir, posAir) = getCenter(AIR_GROUP);
+            std::tie(hasAir, posAir) = getCenter(MAIN_GROUP, false, true);
             if (hasAir) {
                 m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setGroup(AIR_GROUP);
+                m.setGroup(MAIN_GROUP);
+                m.setVehicleType(VehicleType::FIGHTER);
+                queueMove(0, m);
+
+                m.setAction(ActionType::ADD_TO_SELECTION);
+                m.setVehicleType(VehicleType::HELICOPTER);
                 queueMove(0, m);
 
                 m.setAction(ActionType::MOVE);
@@ -776,7 +755,7 @@ bool MyStrategy::antiNuke() {
                 if (!v.second.isMine ||
                     std::find(v.second.v.getGroups().begin(),
                               v.second.v.getGroups().end(),
-                              ANTINUKE_GROUP) == v.second.v.getGroups().end())
+                              MAIN_GROUP) == v.second.v.getGroups().end())
                     continue;
                 const auto d = v.second.v.getSquaredDistanceTo(strikeX, strikeY);
                 if (d < ctx_.game->getTacticalNuclearStrikeRadius()*ctx_.game->getTacticalNuclearStrikeRadius()) {
@@ -800,7 +779,7 @@ bool MyStrategy::antiNuke() {
 
                     Move m;
                     m.setAction(ActionType::CLEAR_AND_SELECT);
-                    m.setGroup(ANTINUKE_GROUP);
+                    m.setGroup(MAIN_GROUP);
                     queueMove(0, m);
 
                     m.setAction(ActionType::SCALE);
@@ -829,7 +808,7 @@ bool MyStrategy::antiNuke() {
             if (nukePos.x >= 0) {
                 Move m;
                 m.setAction(ActionType::CLEAR_AND_SELECT);
-                m.setGroup(ANTINUKE_GROUP);
+                m.setGroup(MAIN_GROUP);
                 queueMove(0, m);
 
                 m.setAction(ActionType::SCALE);
@@ -1184,38 +1163,8 @@ bool MyStrategy::startupFormation() {
             m.setFactor(0.1);
             queueMove(0, m);
 
-            //m.setAction(ActionType::ASSIGN);
-            //m.setGroup(MAIN_GROUP);
-            //queueMove(0, m);
-
-            m.setAction(ActionType::DESELECT);
-            m.setGroup(0);
-            m.setVehicleType(VehicleType::FIGHTER);
-            queueMove(0, m);
-
-            m.setVehicleType(VehicleType::HELICOPTER);
-            queueMove(0, m);
-
             m.setAction(ActionType::ASSIGN);
-            m.setGroup(LAND_GROUP);
-            queueMove(0, m);
-
-            m.setAction(ActionType::CLEAR_AND_SELECT);
-            m.setGroup(0);
-            m.setVehicleType(VehicleType::FIGHTER);
-            queueMove(0, m);
-
-            m.setAction(ActionType::DESELECT);
-            m.setGroup(NUKE_GROUP);
-            queueMove(0, m);
-
-            m.setAction(ActionType::ADD_TO_SELECTION);
-            m.setGroup(0);
-            m.setVehicleType(VehicleType::HELICOPTER);
-            queueMove(0, m);
-
-            m.setAction(ActionType::ASSIGN);
-            m.setGroup(AIR_GROUP);
+            m.setGroup(MAIN_GROUP);
             queueMove(0, m);
 
             state = State::Rotate;
@@ -1229,7 +1178,7 @@ bool MyStrategy::startupFormation() {
             queueMove(0, m);
 
             V2d c;
-            std::tie(std::ignore, c) = getCenter(LAND_GROUP);
+            std::tie(std::ignore, c) = getCenter(MAIN_GROUP, true, false);
 
             m.setAction(ActionType::ROTATE);
             m.setX(c.x);
@@ -1252,11 +1201,12 @@ bool MyStrategy::startupFormation() {
     return true;
 }
 
-std::pair<bool, V2d> MyStrategy::getCenter(int group) const {
+std::pair<bool, V2d> MyStrategy::getCenter(int group, bool isGround, bool isAir) const {
     int cnt = 0;
     V2d res{0., 0.};
     for (const auto &v: vehicles_) {
         if (v.second.isMine &&
+            (v.second.v.isAerial() == isAir || v.second.v.isAerial() != isGround) &&
             std::find(v.second.v.getGroups().begin(),
                       v.second.v.getGroups().end(),
                       group) != v.second.v.getGroups().end()) {
@@ -1382,12 +1332,6 @@ bool MyStrategy::nukeStriker() {
             m.setGroup(MAIN_GROUP);
             queueMove(0, m);
 
-            m.setGroup(AIR_GROUP);
-            queueMove(0, m);
-
-//            m.setGroup(ANTINUKE_GROUP);
-//            queueMove(0, m);
-
             m.setAction(ActionType::MOVE);
             m.setX(32);
             m.setY(32);
@@ -1408,7 +1352,7 @@ bool MyStrategy::nukeStriker() {
             }
             bool hasMain;
             V2d mainPos;
-            std::tie(hasMain, mainPos) = getCenter(MAIN_GROUP);
+            std::tie(hasMain, mainPos) = getCenter(MAIN_GROUP, true, true);
             if (hasMain) {
                 f.addPoint({ctx_.game->getWorldWidth() - mainPos.x, ctx_.game->getWorldHeight() - mainPos.y}, -1);
             }
@@ -1816,12 +1760,6 @@ void MyStrategy::manageClusters() {
             m.setAction(ActionType::ASSIGN);
             m.setGroup(MAIN_GROUP);
             queueMove(0, m);
-
-            m.setGroup(AIR_GROUP);
-            queueMove(0, m);
-
-            //m.setGroup(ANTINUKE_GROUP);
-            //queueMove(0, m);
         } else {
             V2d t = target(center, true, false);
 
