@@ -21,19 +21,23 @@ public:
     void move(const model::Player& me, const model::World& world, const model::Game& game, model::Move& move) override;
 
 private:
-    void initializeStrategy(const model::Game &game);
+    void initializeStrategy(const model::World &world, const model::Game &game);
     void initializeTick(const model::Player &me, const model::World &world, const model::Game &game, const model::Move &move);
     void queueMove(int delay, const model::Move &m, std::function<void(void)> &&f = std::function<void(void)>());
     bool executeDelayedMove(model::Move& move);
     void move();
     V2d target(const V2d &c, bool acceptFacility, bool isMainForce = false) const;
+    V2d target2(const V2d &c, int excludeFac = -1) const;
     void nuke(const V2d &grPos, V2d &nukePos, VId &strikeUnit);
     double getWeatherVisibility(model::WeatherType w) const;
     double getTerrainVisibility(model::TerrainType t) const;
     std::pair<bool, V2d> getCenter(int group, bool isGround, bool isAir) const;
+    int closestFacIdx(const V2d &c, int exclude = -1) const;
+    V2d enemyNearFac(int facIdx) const;
 
     bool startupFormation();
     bool mainForce();
+    bool mainForce2();
     double clampX(double x) const;
     double clampY(double y) const;
     V2d clamp4main(V2d c, V2d t) const;
@@ -50,6 +54,7 @@ private:
     MoveQueue moveQueue_;
     Context ctx_;
     Clusterize::ClusterLists *clist_;
+    bool withFacility_;
 };
 
 #endif
