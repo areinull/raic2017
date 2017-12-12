@@ -760,6 +760,7 @@ bool MyStrategy::antiNuke() {
         Converge
     };
     static auto state = State::Idle;
+    static bool waitingMoveQueue = false;
     static int moveCnt = 0;
     static V2d nukePos{-1., -1.};
 
@@ -811,12 +812,16 @@ bool MyStrategy::antiNuke() {
                 ++moveCnt;
             } else {
                 state = State::Converge;
+                moveCnt = ctx_.game->getTacticalNuclearStrikeDelay();
                 return antiNuke();
             }
         }
         break;
 
         case State::Converge: {
+            if (waitingMoveQueue) {
+                break;
+            }
             if (!moveCnt) {
                 state = State::Idle;
                 return false;
@@ -831,8 +836,9 @@ bool MyStrategy::antiNuke() {
                 m.setX(nukePos.x);
                 m.setY(nukePos.y);
                 m.setFactor(0.1);
-                queueMove(0, m);
+                queueMove(0, m, [&waitingMoveQueue](){ waitingMoveQueue = false; });
 
+                waitingMoveQueue = true;
                 nukePos = {-1., -1.};
             }
             --moveCnt;
