@@ -372,6 +372,20 @@ void MyStrategy::nuke(const V2d &c, V2d &nukePos, VId &strikeUnit) {
 
 
 void MyStrategy::move() {
+    if (ctx_.world->getTickIndex() == 0) {
+        Move m;
+        m.setAction(ActionType::CLEAR_AND_SELECT);
+        m.setLeft(0);
+        m.setRight(ctx_.game->getWorldWidth());
+        m.setTop(0);
+        m.setBottom(ctx_.game->getWorldHeight());
+        queueMove(0, m);
+
+        m.setAction(ActionType::ASSIGN);
+        m.setGroup(MAIN_GROUP);
+        queueMove(0, m);
+    }
+
     nukeStriker();
 
     const bool isStartup = startupFormation();
@@ -1157,10 +1171,6 @@ bool MyStrategy::startupFormation() {
             m.setX((xmin+xmax)/2.);
             m.setY((ymin+ymax)/2.);
             m.setFactor(0.1);
-            queueMove(0, m);
-
-            m.setAction(ActionType::ASSIGN);
-            m.setGroup(MAIN_GROUP);
             queueMove(0, m);
 
             state = State::Rotate;
