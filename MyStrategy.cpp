@@ -1459,6 +1459,7 @@ bool MyStrategy::nukeStriker() {
                 ++cnt;
             }
             if (!cnt) {
+                state = State::Idle;
                 return false;
             }
             t /= cnt;
@@ -1468,6 +1469,7 @@ bool MyStrategy::nukeStriker() {
                 if (!v.second.isMine)
                     continue;
                 if (v.second.v.getSquaredDistanceTo(t.x, t.y) < nSq) {
+                    state = State::Idle;
                     return false;
                 }
             }
