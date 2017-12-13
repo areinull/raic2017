@@ -1340,9 +1340,10 @@ bool MyStrategy::nukeStriker() {
         case State::Idle: {
             MoveField f;
             bool enemyVisible = false;
+            const bool canStrike = ctx_.me->getRemainingNuclearStrikeCooldownTicks() < 20;
             for (const auto &v: vehicles_) {
                 if (!v.second.isMine) {
-                    f.addEnemyUnit(v.second.pos);
+                    f.addEnemyUnit(v.second.pos, canStrike);
                     enemyVisible = true;
                 } else if (v.second.v.isAerial() && v.first != vId) {
                     f.addFriendUnit(v.second.pos);

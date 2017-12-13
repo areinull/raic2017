@@ -13,7 +13,7 @@ public:
     MoveField();
 
     void clearField();
-    void addEnemyUnit(const V2d &p);
+    void addEnemyUnit(const V2d &p, bool canStrike);
     void addFriendUnit(const V2d &p);
     void addPoint(const V2d &p, int v);
     void addNuke(const V2d &p);
@@ -34,7 +34,7 @@ private:
     static constexpr int gridMax_ = 1024 / gridStride_;
     static constexpr int fireRange_ = (50-1)/gridStride_+1;
     static constexpr int nukeRange_ = (55-1)/gridStride_+1;
-    static constexpr int visionRange_ = (100-1)/gridStride_+1;
+    static constexpr int evadeRange_ = (100-1)/gridStride_+1;
 
     int field_[gridMax_][gridMax_];
 

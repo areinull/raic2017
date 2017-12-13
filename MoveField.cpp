@@ -21,15 +21,27 @@ int MoveField::clamp(int v) {
     return std::max(0, std::min(gridMax_-1, v));
 }
 
-void MoveField::addEnemyUnit(const V2d &p) {
+void MoveField::addEnemyUnit(const V2d &p, bool canStrike) {
     const int xi = p.x/gridStride_;
     const int yi = p.y/gridStride_;
-    for (int x = clamp(xi-nukeRange_), x_end = clamp(xi+nukeRange_)+1; x < x_end; ++x) {
-        for (int y = clamp(yi-nukeRange_), y_end = clamp(yi+nukeRange_)+1; y < y_end; ++y) {
-            if (std::abs(xi-x) <= fireRange_ && std::abs(yi-y) <= fireRange_) {
-                field_[x][y] = 100;
-            } else if (field_[x][y] <= 0) {
-                field_[x][y] -= 1;
+    if (canStrike) {
+        for (int x = clamp(xi - nukeRange_), x_end = clamp(xi + nukeRange_) + 1; x < x_end; ++x) {
+            for (int y = clamp(yi - nukeRange_), y_end = clamp(yi + nukeRange_) + 1; y < y_end; ++y) {
+                if (std::abs(xi - x) <= fireRange_ && std::abs(yi - y) <= fireRange_) {
+                    field_[x][y] = 100;
+                } else if (field_[x][y] <= 0) {
+                    field_[x][y] -= 1;
+                }
+            }
+        }
+    } else {
+        for (int x = clamp(xi - evadeRange_ - 1), x_end = clamp(xi + evadeRange_ + 1); x <= x_end; ++x) {
+            for (int y = clamp(yi - evadeRange_ - 1), y_end = clamp(yi + evadeRange_ + 1); y <= y_end; ++y) {
+                if (std::abs(xi - x) <= evadeRange_ && std::abs(yi - y) <= evadeRange_) {
+                    field_[x][y] = 100;
+                } else if (field_[x][y] <= 0) {
+                    field_[x][y] -= 1;
+                }
             }
         }
     }
