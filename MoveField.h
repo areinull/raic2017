@@ -16,6 +16,7 @@ public:
     void addEnemyUnit(const V2d &p);
     void addFriendUnit(const V2d &p);
     void addPoint(const V2d &p, int v);
+    void addNuke(const V2d &p);
     void addWeather(const Context &ctx);
     std::vector<V2d> pathToNeg(const V2d &s, bool global) const;
     int value(const V2d &p) const;

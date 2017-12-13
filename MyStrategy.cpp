@@ -376,12 +376,8 @@ void MyStrategy::move() {
 
     const bool isStartup = startupFormation();
 
-    if (!isStartup && antiNuke()) {
-        return;
-    }
-
     if (!isStartup) {
-        mainForce();
+        antiNuke() || mainForce();
         manageFacilities();
         if (ctx_.world->getTickIndex()%60 == 0) {
             manageClusters();
@@ -1343,18 +1339,32 @@ bool MyStrategy::nukeStriker() {
 
         case State::Idle: {
             MoveField f;
+            bool enemyVisible = false;
             for (const auto &v: vehicles_) {
                 if (!v.second.isMine) {
                     f.addEnemyUnit(v.second.pos);
+                    enemyVisible = true;
                 } else if (v.second.v.isAerial() && v.first != vId) {
                     f.addFriendUnit(v.second.pos);
                 }
             }
-            bool hasMain;
-            V2d mainPos;
-            std::tie(hasMain, mainPos) = getCenter(MAIN_GROUP, true, true);
-            if (hasMain) {
-                f.addPoint({ctx_.game->getWorldWidth() - mainPos.x, ctx_.game->getWorldHeight() - mainPos.y}, -1);
+            if (!enemyVisible) {
+                bool hasMain;
+                V2d mainPos;
+                std::tie(hasMain, mainPos) = getCenter(MAIN_GROUP, true, true);
+                if (hasMain) {
+                    f.addPoint({ctx_.game->getWorldWidth() - mainPos.x, ctx_.game->getWorldHeight() - mainPos.y}, -1);
+                }
+            }
+            if (ctx_.world->getOpponentPlayer().getNextNuclearStrikeTickIndex() >= 0) {
+                const double strikeX = ctx_.world->getOpponentPlayer().getNextNuclearStrikeX();
+                const double strikeY = ctx_.world->getOpponentPlayer().getNextNuclearStrikeY();
+                f.addNuke({strikeX, strikeY});
+            }
+            if (ctx_.me->getNextNuclearStrikeTickIndex() >= 0) {
+                const double strikeX = ctx_.me->getNextNuclearStrikeX();
+                const double strikeY = ctx_.me->getNextNuclearStrikeY();
+                f.addNuke({strikeX, strikeY});
             }
             f.addWeather(ctx_);
 

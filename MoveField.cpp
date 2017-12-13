@@ -51,6 +51,16 @@ void MoveField::addPoint(const V2d &p, int v) {
     field_[xi][yi] += v;
 }
 
+void MoveField::addNuke(const V2d &p) {
+    const int xi = p.x/gridStride_;
+    const int yi = p.y/gridStride_;
+    for (int x = clamp(xi-nukeRange_), x_end = clamp(xi+nukeRange_); x <= x_end; ++x) {
+        for (int y = clamp(yi-nukeRange_), y_end = clamp(yi+nukeRange_); y <= y_end; ++y) {
+            field_[x][y] = 100;
+        }
+    }
+}
+
 void MoveField::addWeather(const Context &ctx) {
     for (int x=0; x < gridMax_; ++x) {
         for (int y=0; y < gridMax_; ++y) {
