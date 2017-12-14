@@ -705,11 +705,11 @@ bool MyStrategy::mainForce() {
 }
 
 double MyStrategy::clampX(double x) const {
-    return std::max(0., std::min(ctx_.world->getWidth(), x));
+    return std::max(0., std::min(ctx_.world->getWidth()-1, x));
 }
 
 double MyStrategy::clampY(double y) const {
-    return std::max(0., std::min(ctx_.world->getHeight(), y));
+    return std::max(0., std::min(ctx_.world->getHeight()-1, y));
 }
 
 V2d MyStrategy::clamp4main(V2d c, V2d t) const {
